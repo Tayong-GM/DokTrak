@@ -1,0 +1,101 @@
+/* DokTrak teal + white theme. Change the variables to re-theme everything. */
+:root {
+  --dk-primary: #0d9488;
+  --dk-primary-dark: #0f766e;
+  --dk-primary-light: #2dd4bf;
+  --dk-tint: #ccfbf1;
+  --dk-tint-soft: #f0fdfa;
+  --dk-text: #344767;
+  --dk-muted: #67748e;
+  --dk-border: #d2d6da;
+  --dk-danger: #dc2626;
+  --dk-gradient: linear-gradient(310deg, var(--dk-primary), var(--dk-primary-light));
+}
+
+/* ---- Global teal overrides (sidebar active icon, primary gradients) ---- */
+.bg-gradient-primary { background-image: var(--dk-gradient); }
+.navbar-vertical .navbar-nav > .nav-item .nav-link.active .icon { background-image: var(--dk-gradient); }
+
+/* ---- Page header ---- */
+.dk-hero {
+  position: relative; overflow: hidden;
+  background-image: linear-gradient(310deg, var(--dk-primary-dark), var(--dk-primary) 55%, var(--dk-primary-light));
+  border-radius: 1rem; padding: 1.4rem 1.6rem;
+  box-shadow: 0 10px 25px rgba(13, 148, 136, .25);
+}
+.dk-hero::after {
+  content: ""; position: absolute; right: -40px; top: -60px; width: 190px; height: 190px;
+  border-radius: 50%; background: rgba(255, 255, 255, .12);
+}
+
+/* ---- Section cards ---- */
+.dk-card { border: 0; border-radius: 1rem; box-shadow: 0 20px 27px 0 rgba(0, 0, 0, .05); }
+.dk-card-head { display: flex; align-items: center; gap: .85rem; padding: 1.1rem 1.4rem 0; }
+.dk-icon {
+  width: 2.4rem; height: 2.4rem; flex: 0 0 auto; border-radius: .6rem; color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: .95rem;
+  background-image: var(--dk-gradient); box-shadow: 0 4px 10px rgba(13, 148, 136, .3);
+}
+
+/* ---- Inputs ---- */
+.dk-label { display: block; margin-bottom: .35rem; font-size: .78rem; font-weight: 600; color: var(--dk-text); }
+.dk-req { color: var(--dk-primary); margin-left: .15rem; }
+.dk .form-control, .dk .form-select { border-radius: .55rem; border-color: var(--dk-border); color: var(--dk-text); }
+.dk .form-control:focus, .dk .form-select:focus {
+  border-color: var(--dk-primary-light); box-shadow: 0 0 0 2px rgba(13, 148, 136, .22);
+}
+.dk .form-control.is-invalid, .dk .form-select.is-invalid { border-color: var(--dk-danger); background-image: none; }
+.dk-help { display: block; margin-top: .3rem; font-size: .72rem; color: var(--dk-muted); }
+.dk-error { margin-top: .3rem; font-size: .75rem; color: var(--dk-danger); }
+.dk-count { margin-top: .25rem; text-align: right; font-size: .7rem; color: var(--dk-muted); }
+
+.dk .form-check-input:checked { background-color: var(--dk-primary); border-color: var(--dk-primary); }
+.dk .form-check-input:focus { border-color: var(--dk-primary-light); box-shadow: 0 0 0 2px rgba(13, 148, 136, .22); }
+.dk .form-check-label { font-size: .85rem; color: var(--dk-text); }
+
+/* ---- Segmented radio (priority etc.) ---- */
+.dk-segment { display: flex; flex-wrap: wrap; gap: .5rem; }
+.dk-seg-input { position: absolute; opacity: 0; pointer-events: none; }
+.dk-seg-label {
+  margin: 0; padding: .5rem 1.1rem; cursor: pointer; user-select: none;
+  font-size: .78rem; font-weight: 600; color: var(--dk-muted);
+  background: #fff; border: 1px solid var(--dk-border); border-radius: .55rem; transition: all .15s;
+}
+.dk-seg-label:hover { border-color: var(--dk-primary-light); color: var(--dk-primary-dark); }
+.dk-seg-input:checked + .dk-seg-label {
+  color: #fff; border-color: transparent; background-image: var(--dk-gradient);
+  box-shadow: 0 4px 10px rgba(13, 148, 136, .28);
+}
+.dk-seg-input:focus-visible + .dk-seg-label { box-shadow: 0 0 0 2px rgba(13, 148, 136, .35); }
+
+/* ---- Upload zone ---- */
+.dk-drop {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .2rem; padding: 1.6rem 1rem; text-align: center;
+  background: var(--dk-tint-soft); border: 2px dashed var(--dk-primary-light); border-radius: .85rem;
+  transition: background .15s, border-color .15s;
+}
+.dk-drop > i { font-size: 1.7rem; color: var(--dk-primary); }
+.dk-drop-title { font-size: .85rem; font-weight: 600; color: var(--dk-text); word-break: break-all; }
+.dk-drop-hint { font-size: .72rem; color: var(--dk-muted); }
+.dk-drop:hover, .dk-drop.is-over { background: var(--dk-tint); border-color: var(--dk-primary); }
+.dk-drop.has-file { border-style: solid; background: var(--dk-tint-soft); }
+.dk-drop.is-invalid { border-color: var(--dk-danger); }
+.dk-file-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+/* ---- Buttons ---- */
+.dk-btn {
+  padding: .7rem 1.6rem; font-size: .75rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+  color: #fff; border: 0; border-radius: .6rem; background-image: var(--dk-gradient);
+  box-shadow: 0 4px 12px rgba(13, 148, 136, .3); transition: transform .12s, box-shadow .12s;
+}
+.dk-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(13, 148, 136, .38); }
+.dk-btn-ghost { color: var(--dk-primary-dark); background: #fff; background-image: none; border: 1px solid var(--dk-primary-light); box-shadow: none; }
+.dk-btn-ghost:hover { background: var(--dk-tint-soft); box-shadow: none; }
+
+/* ---- Alerts ---- */
+.dk-alert {
+  padding: .85rem 1.1rem; font-size: .85rem; color: var(--dk-primary-dark);
+  background: var(--dk-tint); border-left: 4px solid var(--dk-primary); border-radius: .6rem;
+}
+.dk-alert-error { color: #991b1b; background: #fee2e2; border-left-color: var(--dk-danger); }

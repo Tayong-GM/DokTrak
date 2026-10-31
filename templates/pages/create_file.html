@@ -1,14 +1,94 @@
 {% extends 'layouts/base.html' %}
 {% load static %}
 
-{% block title %}Reports{% endblock title %}
+{% block title %}{{ page.title }}{% endblock title %}
+
+{% block extra_css %}
+<link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
+{% endblock extra_css %}
 
 {% block content %}
-<div class="container-fluid py-4">
-  <!-- your body here -->
+<div class="container-fluid py-4 dk">
+  <div class="row">
+    <div class="col-12 col-xl-10 mx-auto">
+
+      <div class="dk-hero mb-4">
+        <h5 class="text-white mb-1">{{ page.title }}</h5>
+        <p class="text-white opacity-8 text-sm mb-0">{{ page.subtitle }}</p>
+      </div>
+
+      {% for message in messages %}
+        <div class="dk-alert mb-4" role="alert"><i class="fas fa-check-circle me-2"></i>{{ message }}</div>
+      {% endfor %}
+      {% if has_errors %}
+        <div class="dk-alert dk-alert-error mb-4" role="alert"><i class="fas fa-exclamation-circle me-2"></i>Please fix the highlighted fields and try again.</div>
+      {% endif %}
+
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        {% for section in sections %}
+        <div class="card dk-card mb-4">
+          <div class="dk-card-head">
+            <div class="dk-icon"><i class="fas {{ section.icon|default:'fa-file-alt' }}"></i></div>
+            <div>
+              <h6 class="mb-0">{{ section.title }}</h6>
+              {% if section.description %}<p class="text-xs text-secondary mb-0">{{ section.description }}</p>{% endif %}
+            </div>
+          </div>
+          <div class="card-body pt-3">
+            <div class="row">
+              {% for field in section.fields %}
+                {% include 'includes/form_field.html' %}
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+
+        <div class="d-flex justify-content-end gap-2 mb-4">
+          <button type="reset" class="dk-btn dk-btn-ghost">Reset</button>
+          <button type="submit" class="dk-btn">{{ page.submit_label }}</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
 </div>
 {% endblock content %}
 
 {% block extra_js %}
-  <!-- optional page-specific scripts -->
+<script>
+  // Upload zone: show chosen file name + size, drag highlight
+  document.querySelectorAll('.dk-drop').forEach(function (drop) {
+    var input = drop.querySelector('input[type=file]');
+    var title = drop.querySelector('[data-title]');
+    var hint = drop.querySelector('[data-hint]');
+    var t0 = title.textContent, h0 = hint.textContent;
+    input.addEventListener('change', function () {
+      var f = input.files[0];
+      if (f) {
+        title.textContent = f.name;
+        hint.textContent = (f.size / 1048576).toFixed(2) + ' MB';
+        drop.classList.add('has-file');
+      } else { title.textContent = t0; hint.textContent = h0; drop.classList.remove('has-file'); }
+    });
+    ['dragenter', 'dragover'].forEach(function (e) { input.addEventListener(e, function () { drop.classList.add('is-over'); }); });
+    ['dragleave', 'drop'].forEach(function (e) { input.addEventListener(e, function () { drop.classList.remove('is-over'); }); });
+    drop.closest('form').addEventListener('reset', function () {
+      title.textContent = t0; hint.textContent = h0; drop.classList.remove('has-file');
+    });
+  });
+
+  // Character counter for textareas with maxlength
+  document.querySelectorAll('.dk textarea[maxlength]').forEach(function (ta) {
+    var c = document.createElement('div');
+    c.className = 'dk-count';
+    ta.insertAdjacentElement('afterend', c);
+    var update = function () { c.textContent = ta.value.length + ' / ' + ta.maxLength; };
+    ta.addEventListener('input', update);
+    ta.closest('form').addEventListener('reset', function () { setTimeout(update, 0); });
+    update();
+  });
+</script>
 {% endblock extra_js %}
