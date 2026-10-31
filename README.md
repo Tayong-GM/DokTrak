@@ -49,22 +49,57 @@ Settings are read from `.env`:
 
 Login, logout, and registration pages come from the `django-admin-soft-dashboard` package.
 
-## Project structure
+## Codebase structure
 
 ```
-config/              Django settings and root URLs
-apps/
-  pages/             Dashboard and theme pages, Product model
-  charts/            Charts page
-  dyn_dt/            Dynamic data tables
-  dyn_api/           Dynamic API
-templates/
-  layouts/base.html  Base layout all pages extend
-  includes/          Sidebar, navbar, footer, settings panel
-  pages/             Dashboard, tables, billing, profile, rtl, virtual-reality
-static/
-  assets/            Theme CSS, JS, fonts, images
-  scss/              Theme SCSS source (compile with gulp)
+< PROJECT ROOT >
+ |
+ |-- config/                       # Project configuration
+ |    |-- settings.py              # Settings (apps, DB, static, DYNAMIC_DATATB / DYNAMIC_API)
+ |    |-- urls.py                  # Root routing
+ |    |-- wsgi.py / asgi.py        # Server entry points
+ |
+ |-- apps/
+ |    |-- pages/                   # Dashboard and theme pages
+ |    |    |-- models.py           # Product model
+ |    |    |-- views.py            # index, tables, billing, vr, rtl, profile
+ |    |    |-- urls.py             # Page routes
+ |    |
+ |    |-- charts/                  # Charts page (reads Product data)
+ |    |-- dyn_dt/                  # Dynamic data tables (filters, CSV export, CRUD)
+ |    |-- dyn_api/                 # Dynamic REST API
+ |
+ |-- templates/
+ |    |-- layouts/
+ |    |    |-- base.html           # Base layout every page extends
+ |    |-- includes/
+ |    |    |-- sidebar.html        # Left navigation
+ |    |    |-- navigation.html     # Top navbar
+ |    |    |-- footer.html
+ |    |    |-- fixed-plugin.html   # Theme settings panel
+ |    |-- pages/                   # index (dashboard), tables, billing, profile, rtl, virtual-reality
+ |    |-- charts/                  # Charts page template
+ |    |-- dyn_dt/                  # Dynamic table templates
+ |    |-- dyn_api/                 # Dynamic API index template
+ |
+ |-- static/
+ |    |-- assets/
+ |    |    |-- css/                # Theme CSS, Nucleo icons
+ |    |    |-- js/                 # Theme JS (core/, plugins/)
+ |    |    |-- fonts/              # Nucleo icon fonts
+ |    |    |-- img/                # Images, logos, illustrations
+ |    |-- scss/                    # Theme SCSS source
+ |
+ |-- cli/                          # Project CLI helpers (git, env, dependencies)
+ |-- nginx/                        # Nginx config for Docker
+ |
+ |-- manage.py                     # Django entry point
+ |-- requirements.txt              # Python dependencies
+ |-- env.sample                    # Example environment file (copy to .env)
+ |-- gulpfile.js, package.json     # SCSS compilation (gulp)
+ |-- Dockerfile, docker-compose.yml, gunicorn-cfg.py
+ |-- render.yaml, build.sh         # Render deployment
+ |-- db.sqlite3                    # Default SQLite database
 ```
 
 ## Adding a page
