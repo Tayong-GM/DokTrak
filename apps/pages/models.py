@@ -1,5 +1,5 @@
 from django.db import models
-
+from .document_model import Document  # noqa
 # Create your models here.
 
 class Product(models.Model):

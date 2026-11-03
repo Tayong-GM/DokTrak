@@ -1,14 +1,277 @@
 {% extends 'layouts/base.html' %}
 {% load static %}
 
-{% block title %}Reports{% endblock title %}
+{% block title %}Recent Files{% endblock title %}
+
+{% block extra_css %}
+<link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
+<style>
+  /* ---- toolbar ---- */
+  .rf-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+  .rf-toolbar .rf-search { flex: 1 1 240px; position: relative; }
+  .rf-toolbar .rf-search i { position: absolute; left: .85rem; top: 50%; transform: translateY(-50%); color: var(--dk-muted); font-size: .8rem; }
+  .rf-toolbar .rf-search input { padding-left: 2.2rem; }
+  .rf-toolbar select { width: auto; min-width: 130px; }
+  .rf-view { display: inline-flex; border: 1px solid var(--dk-border); border-radius: .55rem; overflow: hidden; background: #fff; }
+  .rf-view button { border: 0; background: transparent; padding: .5rem .75rem; color: var(--dk-muted); }
+  .rf-view button.on { color: #fff; background-image: var(--dk-gradient); }
+
+  /* ---- stats ---- */
+  .rf-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; }
+  .rf-stat { display: block; padding: .85rem 1rem; text-decoration: none; background: #fff; border-radius: .85rem;
+             box-shadow: 0 20px 27px 0 rgba(0,0,0,.05); border: 2px solid transparent; transition: transform .12s, border-color .12s; }
+  .rf-stat:hover { transform: translateY(-2px); }
+  .rf-stat.on { border-color: var(--dk-primary-light); background: var(--dk-tint-soft); }
+  .rf-stat b { display: block; font-size: 1.35rem; color: var(--dk-text); line-height: 1.1; }
+  .rf-stat span { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--dk-muted); }
+  .rf-stat.danger b { color: var(--dk-danger); }
+
+  /* ---- file cards ---- */
+  .rf-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+  .rf-files.list { grid-template-columns: 1fr; }
+  .rf-card { display: flex; flex-direction: column; gap: .6rem; padding: 1.1rem 1.2rem; background: #fff; border-radius: 1rem;
+             box-shadow: 0 20px 27px 0 rgba(0,0,0,.05); border-left: 4px solid var(--dk-primary-light); }
+  .rf-card.overdue { border-left-color: var(--dk-danger); }
+  .rf-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .rf-ref { display: inline-flex; align-items: center; gap: .4rem; font-size: .72rem; font-weight: 700; letter-spacing: .03em; color: var(--dk-primary-dark); background: var(--dk-tint); padding: .2rem .55rem; border-radius: .4rem; border: 0; }
+  .rf-ref i { font-size: .7rem; opacity: .7; }
+  .rf-title { margin: 0; font-size: 1rem; font-weight: 700; color: var(--dk-text); word-break: break-word; }
+  .rf-desc { margin: 0; font-size: .8rem; color: var(--dk-muted); }
+  .rf-meta { display: flex; flex-wrap: wrap; gap: .35rem .9rem; font-size: .74rem; color: var(--dk-muted); }
+  .rf-meta i { color: var(--dk-primary); margin-right: .25rem; }
+  .rf-meta .late { color: var(--dk-danger); font-weight: 700; }
+  .rf-badges { display: flex; flex-wrap: wrap; gap: .35rem; }
+  .rf-badge { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: .2rem .55rem; border-radius: .4rem; background: #eef2f6; color: var(--dk-muted); }
+  .rf-badge.type { background: var(--dk-tint-soft); color: var(--dk-primary-dark); }
+  .rf-badge.p-high { background: #ffedd5; color: #c2410c; }
+  .rf-badge.p-urgent { background: #fee2e2; color: #b91c1c; }
+  .rf-badge.p-low { background: #f1f5f9; color: #64748b; }
+  .rf-badge.lock { background: #ede9fe; color: #6d28d9; }
+  .rf-foot { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: auto; padding-top: .7rem; border-top: 1px solid #edf0f3; }
+  .rf-status { font-size: .74rem; font-weight: 600; padding: .3rem 1.6rem .3rem .6rem; border-radius: .5rem; border: 1px solid var(--dk-border); min-width: 0; }
+  .rf-status.s-completed { color: var(--dk-primary-dark); background-color: var(--dk-tint); border-color: var(--dk-primary-light); }
+  .rf-status.s-in_progress { color: #1d4ed8; background-color: #dbeafe; border-color: #93c5fd; }
+  .rf-status.s-returned { color: #b45309; background-color: #fef3c7; border-color: #fcd34d; }
+  .rf-actions { display: flex; gap: .35rem; }
+  .rf-icon { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: .5rem; border: 1px solid var(--dk-border);
+             background: #fff; color: var(--dk-muted); text-decoration: none; font-size: .78rem; transition: all .12s; }
+  .rf-icon:hover { color: var(--dk-primary-dark); border-color: var(--dk-primary-light); background: var(--dk-tint-soft); }
+  .rf-icon.del:hover { color: var(--dk-danger); border-color: #fca5a5; background: #fef2f2; }
+
+  /* list view: horizontal rows */
+  .rf-files.list .rf-card { flex-direction: row; align-items: center; flex-wrap: wrap; gap: .5rem 1.2rem; }
+  .rf-files.list .rf-main { flex: 1 1 320px; min-width: 0; }
+  .rf-files.list .rf-foot { margin-top: 0; padding-top: 0; border-top: 0; flex: 0 0 auto; gap: 1rem; }
+  .rf-files.list .rf-desc { display: none; }
+
+  /* ---- empty state / pager ---- */
+  .rf-empty { text-align: center; padding: 3rem 1rem; background: #fff; border-radius: 1rem; box-shadow: 0 20px 27px 0 rgba(0,0,0,.05); }
+  .rf-empty .big { width: 4rem; height: 4rem; margin: 0 auto 1rem; border-radius: 1rem; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; color: #fff; background-image: var(--dk-gradient); }
+  .rf-pager { display: flex; flex-wrap: wrap; justify-content: center; gap: .35rem; margin: 1.5rem 0 .5rem; }
+  .rf-pager a, .rf-pager span { min-width: 2.2rem; padding: .45rem .7rem; text-align: center; font-size: .78rem; font-weight: 600; border-radius: .5rem;
+                               border: 1px solid var(--dk-border); background: #fff; color: var(--dk-muted); text-decoration: none; }
+  .rf-pager a:hover { color: var(--dk-primary-dark); border-color: var(--dk-primary-light); }
+  .rf-pager .cur { color: #fff; border-color: transparent; background-image: var(--dk-gradient); }
+  .rf-pager .gap { border: 0; background: transparent; }
+  .dk-btn-sm { padding: .55rem 1.1rem; }
+  .dk-btn-danger { background-image: linear-gradient(310deg, #b91c1c, #ef4444); box-shadow: 0 4px 12px rgba(220,38,38,.3); }
+  a.dk-btn { display: inline-block; text-decoration: none; }
+</style>
+{% endblock extra_css %}
 
 {% block content %}
-<div class="container-fluid py-4">
-  <!-- your body here -->
+<div class="container-fluid py-4 dk">
+
+  <!-- ===== Top navigation ===== -->
+  <div class="dk-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div>
+      <h5 class="text-white mb-1">Recent Files</h5>
+      <p class="text-white opacity-8 text-sm mb-0">Everything you have created, newest first.</p>
+    </div>
+    <a href="{% url 'create_file' %}" class="dk-btn dk-btn-ghost" style="position:relative;z-index:1;"><i class="fas fa-plus me-1"></i> Add File</a>
+  </div>
+
+  {% for message in messages %}
+    <div class="dk-alert {% if message.tags == 'error' %}dk-alert-error{% endif %} mb-3" role="alert">
+      <i class="fas {% if message.tags == 'error' %}fa-exclamation-circle{% else %}fa-check-circle{% endif %} me-2"></i>{{ message }}
+    </div>
+  {% endfor %}
+
+  <!-- ===== Summary cards (click to filter) ===== -->
+  <div class="rf-stats mb-4">
+    <a class="rf-stat {% if not filters.status %}on{% endif %}" href="{% url 'recent_files' %}"><b>{{ stats.total }}</b><span>All files</span></a>
+    {% for value, label in status_options %}
+      <a class="rf-stat {% if filters.status == value %}on{% endif %}" href="?status={{ value }}">
+        <b>{% if value == 'pending' %}{{ stats.pending }}{% elif value == 'in_progress' %}{{ stats.in_progress }}{% elif value == 'completed' %}{{ stats.completed }}{% else %}{{ stats.returned }}{% endif %}</b><span>{{ label }}</span>
+      </a>
+    {% endfor %}
+    <a class="rf-stat danger {% if filters.status == 'overdue' %}on{% endif %}" href="?status=overdue"><b>{{ stats.overdue }}</b><span>Overdue</span></a>
+  </div>
+
+  <!-- ===== Search / filter / sort ===== -->
+  <form method="get" class="card dk-card mb-4" id="filterForm">
+    <div class="card-body py-3">
+      <div class="rf-toolbar">
+        <div class="rf-search">
+          <i class="fas fa-search"></i>
+          <input type="search" class="form-control" name="q" value="{{ filters.q }}" placeholder="Search title, reference, office...">
+        </div>
+        <select name="status" class="form-select" data-auto>
+          <option value="">All statuses</option>
+          {% for value, label in status_options %}<option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          <option value="overdue" {% if filters.status == 'overdue' %}selected{% endif %}>Overdue</option>
+        </select>
+        <select name="type" class="form-select" data-auto>
+          <option value="">All types</option>
+          {% for value, label in type_options %}<option value="{{ value }}" {% if filters.type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <select name="priority" class="form-select" data-auto>
+          <option value="">All priorities</option>
+          {% for value, label in priority_options %}<option value="{{ value }}" {% if filters.priority == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <select name="sort" class="form-select" data-auto>
+          {% for value, label in sort_options %}<option value="{{ value }}" {% if filters.sort == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <div class="rf-view" role="group" aria-label="View">
+          <button type="button" data-view="grid" title="Grid view"><i class="fas fa-th-large"></i></button>
+          <button type="button" data-view="list" title="List view"><i class="fas fa-bars"></i></button>
+        </div>
+        {% if has_filters %}<a href="{% url 'recent_files' %}" class="dk-btn dk-btn-ghost dk-btn-sm">Clear</a>{% endif %}
+      </div>
+    </div>
+  </form>
+
+  <p class="text-xs text-secondary mb-3">{{ result_count }} file{{ result_count|pluralize }}{% if has_filters %} found{% endif %}</p>
+
+  <!-- ===== Files ===== -->
+  {% if page_obj %}
+  <div class="rf-files" id="rfFiles">
+    {% for f in page_obj %}
+    <div class="rf-card {% if f.is_overdue %}overdue{% endif %}">
+      <div class="rf-main">
+        <div class="rf-top mb-2">
+          <button type="button" class="rf-ref" data-copy="{{ f.reference_no }}" title="Click to copy">{{ f.reference_no }} <i class="far fa-copy"></i></button>
+          <div class="rf-badges">
+            {% if f.confidential %}<span class="rf-badge lock"><i class="fas fa-lock me-1"></i>Confidential</span>{% endif %}
+            <span class="rf-badge p-{{ f.priority }}">{{ f.priority_label }}</span>
+          </div>
+        </div>
+        <h6 class="rf-title">{{ f.title }}</h6>
+        {% if f.description %}<p class="rf-desc mt-1">{{ f.description|truncatechars:110 }}</p>{% endif %}
+        <div class="rf-meta mt-2">
+          {% if f.type_label %}<span><i class="fas fa-tag"></i>{{ f.type_label }}</span>{% endif %}
+          {% if f.from_office or f.to_office %}<span><i class="fas fa-route"></i>{{ f.from_office|default:"?" }} &rarr; {{ f.to_office|default:"?" }}</span>{% endif %}
+          {% if f.due_date %}<span class="{% if f.is_overdue %}late{% endif %}"><i class="far fa-calendar-alt"></i>{% if f.is_overdue %}Overdue &middot; {% else %}Due {% endif %}{{ f.due_date|date:"M d, Y" }}</span>{% endif %}
+          <span title="{{ f.created_at }}"><i class="far fa-clock"></i>{{ f.created_at|timesince }} ago</span>
+        </div>
+      </div>
+
+      <div class="rf-foot">
+        <form method="post" action="{% url 'update_file_status' f.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <select name="status" class="form-select rf-status s-{{ f.status }}" onchange="this.form.submit()" aria-label="Status">
+            {% for value, label in status_options %}<option value="{{ value }}" {% if f.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </form>
+        <div class="rf-actions">
+          {% if f.attachment %}<a class="rf-icon" href="{{ f.attachment.url }}" target="_blank" rel="noopener" title="Open attachment"><i class="fas fa-paperclip"></i></a>{% endif %}
+          <a class="rf-icon" href="{% url 'edit_file' f.pk %}" title="Edit"><i class="fas fa-pen"></i></a>
+          <button type="button" class="rf-icon del" title="Delete" data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-action="{% url 'delete_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+  <nav class="rf-pager" aria-label="Pages">
+    {% if page_obj.has_previous %}<a href="?{% if qs %}{{ qs }}&{% endif %}page={{ page_obj.previous_page_number }}">&laquo;</a>{% endif %}
+    {% for p in page_range %}
+      {% if p == page_obj.paginator.ELLIPSIS %}<span class="gap">&hellip;</span>
+      {% elif p == page_obj.number %}<span class="cur">{{ p }}</span>
+      {% else %}<a href="?{% if qs %}{{ qs }}&{% endif %}page={{ p }}">{{ p }}</a>{% endif %}
+    {% endfor %}
+    {% if page_obj.has_next %}<a href="?{% if qs %}{{ qs }}&{% endif %}page={{ page_obj.next_page_number }}">&raquo;</a>{% endif %}
+  </nav>
+  {% endif %}
+
+  {% else %}
+  <div class="rf-empty">
+    <div class="big"><i class="fas fa-folder-open"></i></div>
+    {% if has_filters %}
+      <h6>No files match your search</h6>
+      <p class="text-sm text-secondary">Try different keywords or clear the filters.</p>
+      <a href="{% url 'recent_files' %}" class="dk-btn dk-btn-ghost dk-btn-sm">Clear filters</a>
+    {% else %}
+      <h6>No files yet</h6>
+      <p class="text-sm text-secondary">Files you create will show up here.</p>
+      <a href="{% url 'create_file' %}" class="dk-btn dk-btn-sm"><i class="fas fa-plus me-1"></i> Add your first file</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ===== Delete confirmation ===== -->
+<div class="modal fade dk" id="deleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" class="modal-content" id="deleteForm" style="border-radius:1rem;">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div class="modal-body text-center p-4">
+        <div class="dk-icon mx-auto mb-3" style="background-image:linear-gradient(310deg,#b91c1c,#ef4444);width:3.2rem;height:3.2rem;"><i class="fas fa-trash"></i></div>
+        <h6 class="mb-1">Delete this file?</h6>
+        <p class="text-sm text-secondary mb-0" id="deleteName"></p>
+        <p class="text-xs text-secondary mt-2 mb-0">This also removes its attachment and cannot be undone.</p>
+      </div>
+      <div class="d-flex justify-content-center gap-2 pb-4">
+        <button type="button" class="dk-btn dk-btn-ghost dk-btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="dk-btn dk-btn-danger dk-btn-sm">Delete</button>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock content %}
 
 {% block extra_js %}
-  <!-- optional page-specific scripts -->
+<script>
+  // auto-apply filters when a dropdown changes
+  document.querySelectorAll('#filterForm [data-auto]').forEach(function (s) {
+    s.addEventListener('change', function () { s.form.submit(); });
+  });
+
+  // grid / list view (remembered)
+  var files = document.getElementById('rfFiles');
+  var viewBtns = document.querySelectorAll('.rf-view button');
+  function setView(v) {
+    if (files) files.classList.toggle('list', v === 'list');
+    viewBtns.forEach(function (b) { b.classList.toggle('on', b.dataset.view === v); });
+    try { localStorage.setItem('rfView', v); } catch (e) {}
+  }
+  viewBtns.forEach(function (b) { b.addEventListener('click', function () { setView(b.dataset.view); }); });
+  var saved = 'grid'; try { saved = localStorage.getItem('rfView') || 'grid'; } catch (e) {}
+  setView(saved);
+
+  // delete modal: point the form at the right file
+  var delModal = document.getElementById('deleteModal');
+  delModal.addEventListener('show.bs.modal', function (e) {
+    var b = e.relatedTarget;
+    document.getElementById('deleteForm').action = b.getAttribute('data-action');
+    document.getElementById('deleteName').textContent = b.getAttribute('data-name');
+  });
+
+  // copy reference number
+  document.querySelectorAll('[data-copy]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var text = b.getAttribute('data-copy');
+      var done = function () {
+        var icon = b.querySelector('i'), old = icon.className;
+        icon.className = 'fas fa-check'; setTimeout(function () { icon.className = old; }, 1200);
+      };
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done);
+      else { var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); done(); }
+    });
+  });
+</script>
 {% endblock extra_js %}
