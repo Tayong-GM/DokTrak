@@ -16,8 +16,21 @@ from .create_file_config import PAGE, SECTIONS
 # `files` -> uploaded files keyed by field name   (files["attachment"])
 # Return the reference number to show in the success message.
 # ---------------------------------------------------------------------------
+from .document_model import Document
+
 def save_document(data, files, request):
     ref = f"{PAGE['reference_prefix']}-{date.today():%Y}-{uuid.uuid4().hex[:6].upper()}"
+    model_fields = {f.name for f in Document._meta.fields}
+    values = {k: v for k, v in data.items() if k in model_fields}
+    values["due_date"] = values.get("due_date") or None
+    if files.get("attachment"):
+        values["attachment"] = files["attachment"]
+    Document.objects.create(
+        reference_no=ref,
+        created_by=request.user if request.user.is_authenticated else None,
+        **values,
+    )
+    return ref
 
     # Example: save to a model
     # Document.objects.create(reference_no=ref, created_by=request.user, **data)
