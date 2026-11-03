@@ -112,7 +112,7 @@
           </div>
           <div class="db-rate">
             <div class="d-flex justify-content-between text-xs mb-1"><span class="text-secondary">Completion rate</span><b>{{ stats.rate }}%</b></div>
-            <div class="bar"><span style="width:{{ stats.rate }}%"></span></div>
+            <div class="bar"><span data-w="{{ stats.rate }}"></span></div>
           </div>
         </div>
       </div>
@@ -181,6 +181,7 @@
 
 {% block extra_js %}
 <script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+
 <script>
   (function () {
     var data = JSON.parse(document.getElementById('chart-data').textContent);
@@ -208,6 +209,6 @@
       data: { labels: data.status.labels, datasets: [{ data: data.status.values, backgroundColor: data.status.labels.map(function (_, i) { return palette[i % palette.length]; }), borderWidth: 2, borderColor: '#fff' }] },
       options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } } } }
     });
-  })();
+  document.querySelectorAll('[data-w]').forEach(function (e) { e.style.width = e.dataset.w + '%'; });})();
 </script>
 {% endblock extra_js %}
