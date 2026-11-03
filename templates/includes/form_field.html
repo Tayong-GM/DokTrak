@@ -1,0 +1,47 @@
+{# Renders one field from create_file_config.py. Usage: {% include 'includes/form_field.html' %} with `field` in context #}
+<div class="col-12 col-md-{{ field.col|default:12 }} mb-3">
+
+  {% if field.type == 'checkbox' %}
+    <div class="form-check dk-check">
+      <input class="form-check-input" type="checkbox" id="id_{{ field.name }}" name="{{ field.name }}" {% if field.checked %}checked{% endif %}>
+      <label class="form-check-label" for="id_{{ field.name }}">{{ field.label }}{% if field.required %}<span class="dk-req">*</span>{% endif %}</label>
+    </div>
+
+  {% else %}
+    <label class="dk-label" for="id_{{ field.name }}">{{ field.label }}{% if field.required %}<span class="dk-req">*</span>{% endif %}</label>
+
+    {% if field.type == 'textarea' %}
+      <textarea class="form-control {% if field.error %}is-invalid{% endif %}" id="id_{{ field.name }}" name="{{ field.name }}" rows="{{ field.rows|default:4 }}" {% if field.max_length %}maxlength="{{ field.max_length }}"{% endif %} {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %} {% if field.readonly %}readonly{% endif %}>{{ field.value }}</textarea>
+
+    {% elif field.type == 'select' %}
+      <select class="form-select {% if field.error %}is-invalid{% endif %}" id="id_{{ field.name }}" name="{{ field.name }}">
+        <option value="">{{ field.placeholder|default:"Select..." }}</option>
+        {% for val, label in field.options %}
+          <option value="{{ val }}" {% if field.value == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+    {% elif field.type == 'radio' %}
+      <div class="dk-segment">
+        {% for val, label in field.options %}
+          <input type="radio" class="dk-seg-input" name="{{ field.name }}" id="id_{{ field.name }}_{{ forloop.counter }}" value="{{ val }}" {% if field.value == val %}checked{% endif %}>
+          <label class="dk-seg-label" for="id_{{ field.name }}_{{ forloop.counter }}">{{ label }}</label>
+        {% endfor %}
+      </div>
+
+    {% elif field.type == 'file' %}
+      <div class="dk-drop {% if field.error %}is-invalid{% endif %}">
+        <i class="fas fa-cloud-upload-alt"></i>
+        <span class="dk-drop-title" data-title>Click to upload or drag and drop</span>
+        <span class="dk-drop-hint" data-hint>{{ field.accept }} &middot; up to {{ page.max_upload_mb }} MB</span>
+        <input type="file" class="dk-file-input" id="id_{{ field.name }}" name="{{ field.name }}" {% if field.accept %}accept="{{ field.accept }}"{% endif %}>
+      </div>
+
+    {% else %}
+      <input type="{{ field.type }}" class="form-control {% if field.error %}is-invalid{% endif %}" id="id_{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}" {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %} {% if field.max_length %}maxlength="{{ field.max_length }}"{% endif %} {% if field.min is not None %}min="{{ field.min }}"{% endif %} {% if field.max is not None %}max="{{ field.max }}"{% endif %} {% if field.readonly %}readonly{% endif %}>
+    {% endif %}
+  {% endif %}
+
+  {% if field.help %}<small class="dk-help">{{ field.help }}</small>{% endif %}
+  {% if field.error %}<div class="dk-error"><i class="fas fa-exclamation-circle me-1"></i>{{ field.error }}</div>{% endif %}
+</div>
