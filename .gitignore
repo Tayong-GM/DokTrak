@@ -1,16 +1,28 @@
+# Python
 *.pyc
-*.DS_Store
+__pycache__/
 *.egg*
-/dist/
-/.idea
-/docs/_build/
-/node_modules/
-build/
+.venv/
+venv/
 env
+
+# Secrets and local data
+.env
+*.sqlite*
+
+# Django
+media/
 /staticfiles/
 
-#src
-#*.sqlite*
+# Build output
+/dist/
+build/
+/docs/_build/
 
-#.env
-node_modules
+# Node
+node_modules/
+
+# Editors / OS
+/.idea
+*.DS_Store
+Thumbs.db
