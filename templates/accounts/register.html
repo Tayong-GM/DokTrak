@@ -1,0 +1,67 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f766e">
+  <title>Create account | DokTrak</title>
+  <link rel="stylesheet" href="{% static 'assets/css/auth.css' %}">
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <section class="auth-story" aria-label="About DokTrak">
+      <a class="auth-brand" aria-label="DokTrak home"><span class="brand-mark">D</span><span>DokTrak</span></a>
+      <div class="story-copy">
+        <span class="eyebrow">DOCUMENT WORKSPACE</span>
+        <h1>Start with a<br>clearer record.</h1>
+        <p>Bring document details and progress together in one dependable place.</p>
+        <div class="workspace-card" aria-hidden="true">
+          <div class="workspace-top"><span class="workspace-icon">D</span><span class="workspace-caption">DOCUMENT STATUS</span><span class="workspace-menu">···</span></div>
+          <div class="workspace-row"><span class="file-icon">PDF</span><span class="file-lines"><i></i><i></i></span><span class="status-pill">In review</span></div>
+          <div class="workspace-row"><span class="file-icon file-icon-muted">DOC</span><span class="file-lines"><i></i><i></i></span><span class="status-pill status-done">Filed</span></div>
+        </div>
+      </div>
+      <div class="story-note">Built for a more organized workday.</div>
+    </section>
+
+    <section class="auth-panel">
+      <div class="auth-card">
+        <div class="mobile-brand"><span class="brand-mark">D</span><span>DokTrak</span></div>
+        <span class="eyebrow eyebrow-green">CREATE YOUR DOKTRAK ACCOUNT</span>
+        <h2>Create your account</h2>
+        <p class="auth-subtitle">Set up your details to get started.</p>
+
+        <form method="post" class="auth-form">
+          {% csrf_token %}
+          {% if form.non_field_errors %}<div class="form-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+          {% for field in form %}
+            <div class="field-group">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.name == 'password1' %}
+                <div class="field-help">
+                  {# Edit these guidance lines directly in this template. #}
+                  <ul>
+                
+                    <li>Your password must contain at least 8 characters.</li>
+                    <li>Your password can't be entirely numeric.</li>
+                    
+                  </ul>
+                </div>
+              {% elif field.name == 'password2' %}
+                <div class="field-help">Enter the same password again to confirm it.</div>
+              {% endif %}
+              {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+          {% endfor %}
+          <button class="auth-submit" type="submit">Create account <span aria-hidden="true">→</span></button>
+        </form>
+
+        <p class="auth-switch">Already have an account? <a href="{% url 'login' %}">Sign in</a></p>
+        <p class="auth-foot">Your documents stay in your workspace.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

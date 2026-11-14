@@ -1,13 +1,13 @@
 from datetime import timedelta
 
+from django.contrib.auth.decorators import login_required
 from django.db.models import Count
 from django.shortcuts import render
 from django.utils import timezone
 
-from .document_model import STATUS_CHOICES, Document
+from .document_model import STATUS_CHOICES, Document, Transfer
 from .recent_files_view import _options          # labels come from create_file_config.py
 
-WEEKS = 8                                        # how many weeks the "created per week" chart shows
 ATTENTION_LIMIT = 6
 RECENT_LIMIT = 6
 
@@ -22,6 +22,7 @@ def _due_note(d, today):
     return f"Due in {n} day{'s' if n != 1 else ''}", "soon"
 
 
+@login_required
 def dashboard(request):
     today = timezone.localdate()
     docs = Document.objects.all()
@@ -58,30 +59,21 @@ def dashboard(request):
         d.status_label = labels["status"].get(d.status, d.status.title())
         d.type_label = labels["type"].get(d.doc_type, d.doc_type.title())
 
-    # ---- chart: files created per week (one query, bucketed in Python) ----
-    this_monday = today - timedelta(days=today.weekday())
-    first_monday = this_monday - timedelta(weeks=WEEKS - 1)
-    weekly = [0] * WEEKS
-    for created in docs.filter(created_at__date__gte=first_monday).values_list("created_at", flat=True):
-        idx = (timezone.localtime(created).date() - first_monday).days // 7
-        if 0 <= idx < WEEKS:
-            weekly[idx] += 1
-    chart = {
-        "weeks": {
-            "labels": [(first_monday + timedelta(weeks=i)).strftime("%b %d") for i in range(WEEKS)],
-            "values": weekly,
-        },
-        "status": {
-            "labels": [label for _, label in STATUS_CHOICES],
-            "values": [counts.get(v, 0) for v, _ in STATUS_CHOICES],
-        },
-    }
+    inbox_files, sent_files = [], []
+    if request.user.is_authenticated:
+        inbox_files = list(Document.objects.filter(assigned_to=request.user).order_by("-updated_at")[:5])
+        sent_files = list(Transfer.objects.filter(sender=request.user).select_related(
+            "document", "recipient").order_by("-sent_at")[:5])
+        for f in inbox_files:
+            f.status_label = labels["status"].get(f.status, f.status.title())
+        for transfer in sent_files:
+            transfer.status_label = labels["status"].get(transfer.document.status, transfer.document.status.title())
 
     return render(request, "pages/index.html", {
         "segment": "dashboard",
         "stats": stats,
         "attention": attention,
         "recent": recent,
-        "chart": chart,
-        "created_this_week": sum(weekly[-1:]),
+        "inbox_files": inbox_files,
+        "sent_files": sent_files,
     })

@@ -121,6 +121,7 @@ def create_file(request):
             f["min"] = date.today().isoformat()
 
     has_errors = False
+    duplicate_warning = False
 
     if request.method == "POST":
         data, files = {}, {}
@@ -138,9 +139,14 @@ def create_file(request):
             has_errors = has_errors or bool(f["error"])
 
         if not has_errors:
-            ref = save_document(data, files, request)
-            messages.success(request, PAGE["success_message"].format(reference_no=ref))
-            return redirect("create_file")
+            duplicate_warning = Document.objects.filter(title__iexact=data.get("title", "")).exists()
+            confirmed_duplicate = request.POST.get("confirm_duplicate") == "1"
+            if duplicate_warning and not confirmed_duplicate:
+                duplicate_warning = True
+            else:
+                ref = save_document(data, files, request)
+                messages.success(request, PAGE["success_message"].format(reference_no=ref))
+                return redirect("create_file")
     else:
         for f in fields:
             default = f.get("default", "")
@@ -154,4 +160,5 @@ def create_file(request):
         "page": PAGE,
         "sections": sections,
         "has_errors": has_errors,
+        "duplicate_warning": duplicate_warning,
     })

@@ -1,0 +1,171 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block title %}Sent Files{% endblock title %}
+
+{% block extra_css %}
+<link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
+<link href="{% static 'assets/css/handoff.css' %}" rel="stylesheet" />
+{% endblock extra_css %}
+
+{% block content %}
+<div class="container-fluid py-4 dk">
+
+  <div class="dk-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div>
+      <h5 class="text-white mb-1">Sent Files</h5>
+      <p class="text-white opacity-8 text-sm mb-0">Files you sent to other people to handle, and whether they received them.</p>
+    </div>
+    <div class="d-flex gap-2" style="position:relative;z-index:1;">
+      <a href="{% url 'inbox' %}" class="dk-btn dk-btn-ghost dk-btn-sm"><i class="fas fa-inbox me-1"></i> My inbox</a>
+      <button type="button" class="dk-btn dk-btn-ghost dk-btn-sm" data-bs-toggle="modal" data-bs-target="#sendModal"><i class="fas fa-paper-plane me-1"></i> Send a file</button>
+    </div>
+  </div>
+
+  {% for message in messages %}
+    <div class="dk-alert {% if message.tags == 'error' %}dk-alert-error{% endif %} mb-3" role="alert">
+      <i class="fas {% if message.tags == 'error' %}fa-exclamation-circle{% else %}fa-check-circle{% endif %} me-2"></i>{{ message }}
+    </div>
+  {% endfor %}
+
+  <div class="ho-chips mb-4">
+    <a class="ho-chip {% if not filters.state %}on{% endif %}" href="{% url 'sent' %}"><b>{{ stats.total }}</b><span>All sent</span></a>
+    <a class="ho-chip {% if filters.state == 'waiting' %}on{% endif %}" href="?state=waiting"><b>{{ stats.waiting }}</b><span>Waiting</span></a>
+    <a class="ho-chip {% if filters.state == 'received' %}on{% endif %}" href="?state=received"><b>{{ stats.received }}</b><span>Received</span></a>
+    <a class="ho-chip {% if filters.state == 'recalled' %}on{% endif %}" href="?state=recalled"><b>{{ stats.recalled }}</b><span>Recalled</span></a>
+  </div>
+
+  <form method="get" class="card dk-card mb-4">
+    <div class="card-body py-3">
+      <div class="ho-toolbar">
+        {% if filters.state %}<input type="hidden" name="state" value="{{ filters.state }}">{% endif %}
+        <div class="ho-search"><i class="fas fa-search"></i><input type="search" class="form-control" name="q" value="{{ filters.q }}" placeholder="Search file or person..."></div>
+        {% if has_filters %}<a href="{% url 'sent' %}" class="dk-btn dk-btn-ghost dk-btn-sm">Clear</a>{% endif %}
+      </div>
+    </div>
+  </form>
+
+  <p class="text-xs text-secondary mb-3">{{ result_count }} transfer{{ result_count|pluralize }}</p>
+
+  {% if page_obj %}
+  <div class="ho-grid">
+    {% for t in page_obj %}
+    <div class="ho-card {% if t.recalled %}{% elif t.received_at %}received{% else %}waiting{% endif %}">
+      <div class="ho-top">
+        <span class="ho-ref">{{ t.document.reference_no }}</span>
+        <div class="ho-badges">
+          {% if t.kind == 'return' %}<span class="ho-badge return">Returned</span>{% elif t.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
+          <span class="ho-st s-{{ t.document.status }}">{{ t.doc_status_label }}</span>
+        </div>
+      </div>
+
+      <h6 class="ho-title">{% if t.document.confidential %}<i class="fas fa-lock me-1" style="color:#6d28d9;" title="Confidential"></i>{% endif %}{{ t.document.title }}</h6>
+
+      <div class="ho-person">
+        <span class="ho-avatar">{{ t.recipient_initial }}</span>
+        <span>Sent to <b>{{ t.recipient_name }}</b> &middot; {{ t.sent_at|timesince }} ago</span>
+      </div>
+      {% if t.remark %}<p class="ho-quote">{{ t.remark }}</p>{% endif %}
+
+      <div>
+        {% if t.recalled %}
+          <span class="ho-state recalled"><i class="fas fa-ban me-1"></i>You recalled this file</span>
+        {% elif t.received_at %}
+          <span class="ho-state received"><i class="fas fa-check-double me-1"></i>Received {{ t.received_at|timesince }} ago</span>
+        {% else %}
+          <span class="ho-state waiting"><i class="far fa-clock me-1"></i>Waiting for {{ t.recipient_name }} to receive it</span>
+        {% endif %}
+        {% if t.holder_name and not t.recalled %}<div class="ho-meta mt-1"><span><i class="fas fa-user"></i>Now with {{ t.holder_name }}</span></div>{% endif %}
+      </div>
+
+      {% if t.can_recall %}
+      <div class="ho-foot">
+        <span class="text-xs text-secondary">Not received yet</span>
+        <form method="post" action="{% url 'recall_transfer' t.pk %}" onsubmit="return confirm('Recall this file from {{ t.recipient_name|escapejs }}?');">
+          {% csrf_token %}
+          <button type="submit" class="ho-icon warn"><i class="fas fa-undo"></i> Recall</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+  <nav class="ho-pager" aria-label="Pages">
+    {% if page_obj.has_previous %}<a href="?{% if qs %}{{ qs }}&{% endif %}page={{ page_obj.previous_page_number }}">&laquo;</a>{% endif %}
+    {% for p in page_range %}
+      {% if p == page_obj.paginator.ELLIPSIS %}<span class="gap">&hellip;</span>
+      {% elif p == page_obj.number %}<span class="cur">{{ p }}</span>
+      {% else %}<a href="?{% if qs %}{{ qs }}&{% endif %}page={{ p }}">{{ p }}</a>{% endif %}
+    {% endfor %}
+    {% if page_obj.has_next %}<a href="?{% if qs %}{{ qs }}&{% endif %}page={{ page_obj.next_page_number }}">&raquo;</a>{% endif %}
+  </nav>
+  {% endif %}
+
+  {% else %}
+  <div class="ho-empty">
+    <div class="big"><i class="fas fa-paper-plane"></i></div>
+    {% if has_filters %}
+      <h6>No transfers match</h6><p class="text-sm text-secondary">Try different keywords or clear the filters.</p>
+      <a href="{% url 'sent' %}" class="dk-btn dk-btn-ghost dk-btn-sm">Clear filters</a>
+    {% else %}
+      <h6>You haven't sent any files yet</h6><p class="text-sm text-secondary">Send a file to someone and you can follow it here.</p>
+      <button type="button" class="dk-btn dk-btn-sm" data-bs-toggle="modal" data-bs-target="#sendModal"><i class="fas fa-paper-plane me-1"></i> Send a file</button>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ===== Send a file modal ===== -->
+<div class="modal fade dk" id="sendModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'send_file' %}" class="modal-content" style="border-radius:1rem;">
+      {% csrf_token %}
+      <div class="modal-body p-4">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="dk-icon"><i class="fas fa-paper-plane"></i></div>
+          <div><h6 class="mb-0">Send a file</h6><p class="text-xs text-secondary mb-0">The person will see it in their inbox.</p></div>
+        </div>
+        {% if sendable and people %}
+        <div class="mb-3">
+          <label class="dk-label" for="sendFile">File</label>
+          <select class="form-select" name="file" id="sendFile" required>
+            <option value="">Choose one of your files...</option>
+            {% for d in sendable %}<option value="{{ d.pk }}" {% if preselect == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.reference_no }} - {{ d.title|truncatechars:50 }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="dk-label" for="sendTo">Send to</label>
+          <select class="form-select" name="recipient" id="sendTo" required>
+            <option value="">Choose a person...</option>
+            {% for pk, label in people %}<option value="{{ pk }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="dk-label" for="sendRemark">Remark <span class="text-secondary fw-normal">(optional)</span></label>
+          <textarea class="form-control" name="remark" id="sendRemark" rows="3" maxlength="300" placeholder="What should they do with it?"></textarea>
+        </div>
+        {% elif not people %}
+        <p class="text-sm text-secondary mb-0">There are no other users to send files to yet.</p>
+        {% else %}
+        <p class="text-sm text-secondary mb-0">You have no files to send. Create a file first, or wait until one is assigned to you.</p>
+        {% endif %}
+      </div>
+      <div class="d-flex justify-content-end gap-2 px-4 pb-4">
+        <button type="button" class="dk-btn dk-btn-ghost dk-btn-sm" data-bs-dismiss="modal">Cancel</button>
+        {% if sendable and people %}<button type="submit" class="dk-btn dk-btn-sm">Send</button>{% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+{% if preselect %}
+<script>
+  // opened from a "Send" link with ?send=<file id>
+  new bootstrap.Modal(document.getElementById('sendModal')).show();
+</script>
+{% endif %}
+{% endblock extra_js %}

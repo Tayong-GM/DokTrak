@@ -64,56 +64,67 @@
   <div class="dk-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
     <div>
       <h5 class="text-white mb-1">{% if request.user.is_authenticated %}Welcome back, {{ request.user.first_name|default:request.user.username }}{% else %}Welcome to DokTrak{% endif %}</h5>
-      <p class="text-white opacity-8 text-sm mb-3">{{ stats.total }} file{{ stats.total|pluralize }} tracked{% if stats.overdue %} &middot; <b>{{ stats.overdue }} overdue</b>{% endif %}{% if created_this_week %} &middot; {{ created_this_week }} new this week{% endif %}</p>
+      <p class="text-white opacity-8 text-sm mb-3">{{ stats.total }} file{{ stats.total|pluralize }} tracked{% if stats.overdue %} &middot; <b>{{ stats.overdue }} overdue</b>{% endif %}</p>
       <div class="db-hero-actions">
         <a href="{% url 'create_file' %}" class="dk-btn dk-btn-ghost dk-btn-sm"><i class="fas fa-plus me-1"></i> Create File</a>
         <a href="{% url 'scan_document' %}" class="dk-btn dk-btn-ghost dk-btn-sm"><i class="fas fa-camera me-1"></i> Scan Document</a>
       </div>
     </div>
-    <form method="get" action="{% url 'recent_files' %}" class="db-track">
+    <!-- <form method="get" action="{% url 'recent_files' %}" class="db-track">
       <input type="search" name="q" placeholder="Find a file by reference or title" aria-label="Find a file">
       <button type="submit"><i class="fas fa-search"></i></button>
-    </form>
+    </form> -->
   </div>
 
   <!-- ===== Count cards (click to open the filtered list) ===== -->
   <div class="db-stats mb-4">
     <a class="db-stat" href="{% url 'recent_files' %}">
-      <div class="dk-icon"><i class="fas fa-folder-open"></i></div>
+      <div class="dk-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-stack preview-icon"><path d="M11 21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1"/><path d="M16 16a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1"/><path d="M21 6a2 2 0 0 0-.586-1.414l-2-2A2 2 0 0 0 17 2h-3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1z"/></svg><i class="fas fa-folder-open"></i></div>
       <div><b>{{ stats.total }}</b><span>All files</span></div>
     </a>
     {% for value, label, n in stats.by_status %}
+    {% if value != 'in_progress' %}
     <a class="db-stat" href="{% url 'recent_files' %}?status={{ value }}">
-      <div class="dk-icon"><i class="fas {% if value == 'pending' %}fa-inbox{% elif value == 'in_progress' %}fa-spinner{% elif value == 'completed' %}fa-check-circle{% elif value == 'returned' %}fa-undo{% else %}fa-file-alt{% endif %}"></i></div>
+      <div class="dk-icon">
+        {% if value == 'pending' %}
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        {% elif value == 'completed' %}
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>
+        {% elif value == 'returned' %}
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 14-4-4 4-4"/><path d="M5 10h9a5 5 0 0 1 0 10h-2"/></svg>
+        {% else %}
+        <i class="fas fa-file-alt" aria-hidden="true"></i>
+        {% endif %}
+      </div>
       <div><b>{{ n }}</b><span>{{ label }}</span></div>
     </a>
+    {% endif %}
     {% endfor %}
     <a class="db-stat danger" href="{% url 'recent_files' %}?status=overdue">
-      <div class="dk-icon"><i class="fas fa-exclamation-triangle"></i></div>
+      <div class="dk-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-exclamation-point preview-icon"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><i class="fas fa-exclamation-triangle"></i></div>
       <div><b>{{ stats.overdue }}</b><span>Overdue</span></div>
     </a>
   </div>
 
-  <!-- ===== Charts ===== -->
+  <!-- ===== Inbox and sent activity ===== -->
   <div class="row g-4 mb-4">
-    <div class="col-lg-8">
+    <div class="col-lg-6">
       <div class="card dk-card h-100">
-        <div class="db-card-title"><h6 class="mb-0">Files created per week</h6><span class="text-xs text-secondary">Last 8 weeks</span></div>
-        <div class="card-body"><div class="db-chart"><canvas id="weekChart"></canvas></div></div>
+        <div class="db-card-title"><h6 class="mb-0"><i class="fas fa-inbox me-2 text-primary"></i>Inbox</h6><a href="{% url 'inbox' %}">View inbox</a></div>
+        <div class="card-body">
+          {% if request.user.is_authenticated %}{% if inbox_files %}<ul class="db-list">
+            {% for f in inbox_files %}<li><a class="db-item" href="{% url 'inbox' %}?q={{ f.reference_no|urlencode }}"><span class="db-dot"></span><span class="db-item-main"><span class="db-item-title">{{ f.title }}</span><span class="db-item-sub">{{ f.reference_no }} &middot; Updated {{ f.updated_at|timesince }} ago</span></span><span class="db-st s-{{ f.status }}">{{ f.status_label }}</span></a></li>{% endfor %}
+          </ul>{% else %}<div class="db-empty"><i class="fas fa-inbox"></i>Your inbox is empty.<br><a href="{% url 'inbox' %}">Open inbox</a></div>{% endif %}{% else %}<div class="db-empty"><i class="fas fa-user-lock"></i>Sign in to view your inbox.</div>{% endif %}
+        </div>
       </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-lg-6">
       <div class="card dk-card h-100">
-        <div class="db-card-title"><h6 class="mb-0">Files by status</h6></div>
+        <div class="db-card-title"><h6 class="mb-0"><i class="fas fa-paper-plane me-2 text-primary"></i>Sent</h6><a href="{% url 'sent' %}">View sent</a></div>
         <div class="card-body">
-          <div class="db-chart" style="height:220px;">
-            <canvas id="statusChart"></canvas>
-            {% if not stats.total %}<div class="db-nodata">No files yet</div>{% endif %}
-          </div>
-          <div class="db-rate">
-            <div class="d-flex justify-content-between text-xs mb-1"><span class="text-secondary">Completion rate</span><b>{{ stats.rate }}%</b></div>
-            <div class="bar"><span data-w="{{ stats.rate }}"></span></div>
-          </div>
+          {% if request.user.is_authenticated %}{% if sent_files %}<ul class="db-list">
+            {% for transfer in sent_files %}<li><a class="db-item" href="{% url 'sent' %}?q={{ transfer.document.reference_no|urlencode }}"><span class="db-dot"></span><span class="db-item-main"><span class="db-item-title">{{ transfer.document.title }}</span><span class="db-item-sub">To {{ transfer.recipient.get_full_name|default:transfer.recipient.username }} &middot; {{ transfer.sent_at|timesince }} ago</span></span><span class="db-st s-{{ transfer.document.status }}">{{ transfer.status_label }}</span></a></li>{% endfor %}
+          </ul>{% else %}<div class="db-empty"><i class="fas fa-paper-plane"></i>You haven't sent any files yet.<br><a href="{% url 'sent' %}">Open sent files</a></div>{% endif %}{% else %}<div class="db-empty"><i class="fas fa-user-lock"></i>Sign in to view sent files.</div>{% endif %}
         </div>
       </div>
     </div>
@@ -176,39 +187,10 @@
   </div>
 </div>
 
-{{ chart|json_script:"chart-data" }}
 {% endblock content %}
 
 {% block extra_js %}
-<script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
-
 <script>
-  (function () {
-    var data = JSON.parse(document.getElementById('chart-data').textContent);
-    var teal = '#0d9488', tealLight = '#2dd4bf';
-
-    // files created per week
-    var wk = document.getElementById('weekChart').getContext('2d');
-    var grad = wk.createLinearGradient(0, 0, 0, 280);
-    grad.addColorStop(0, tealLight); grad.addColorStop(1, teal);
-    new Chart(wk, {
-      type: 'bar',
-      data: { labels: data.weeks.labels, datasets: [{ label: 'Files created', data: data.weeks.values, backgroundColor: grad, borderRadius: 6, maxBarThickness: 36 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#eef2f6' } }, x: { grid: { display: false } } }
-      }
-    });
-
-    // files by status (colors follow the status order; extra statuses reuse the palette)
-    var palette = ['#94a3b8', '#3b82f6', teal, '#f59e0b', '#8b5cf6', '#ef4444'];
-    var st = document.getElementById('statusChart').getContext('2d');
-    new Chart(st, {
-      type: 'doughnut',
-      data: { labels: data.status.labels, datasets: [{ data: data.status.values, backgroundColor: data.status.labels.map(function (_, i) { return palette[i % palette.length]; }), borderWidth: 2, borderColor: '#fff' }] },
-      options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } } } }
-    });
-  document.querySelectorAll('[data-w]').forEach(function (e) { e.style.width = e.dataset.w + '%'; });})();
+  document.querySelectorAll('[data-w]').forEach(function (e) { e.style.width = e.dataset.w + '%'; });
 </script>
 {% endblock extra_js %}

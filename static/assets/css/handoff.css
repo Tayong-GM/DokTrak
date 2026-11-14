@@ -1,0 +1,72 @@
+/* Shared styles for the Inbox and Sent pages (needs create_file.css for the --dk-* colors). */
+a.dk-btn { display: inline-block; text-decoration: none; }
+.dk-btn-sm { padding: .55rem 1.1rem; }
+
+/* filter chips */
+.ho-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; }
+.ho-chip { display: block; padding: .85rem 1rem; text-decoration: none; background: #fff; border-radius: .85rem; border: 2px solid transparent;
+           box-shadow: 0 20px 27px 0 rgba(0,0,0,.05); transition: transform .12s, border-color .12s; }
+.ho-chip:hover { transform: translateY(-2px); }
+.ho-chip.on { border-color: var(--dk-primary-light); background: var(--dk-tint-soft); }
+.ho-chip b { display: block; font-size: 1.35rem; line-height: 1.1; color: var(--dk-text); }
+.ho-chip span { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--dk-muted); }
+.ho-chip.hot b { color: var(--dk-primary); }
+
+/* toolbar */
+.ho-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.ho-search { position: relative; flex: 1 1 240px; }
+.ho-search i { position: absolute; left: .85rem; top: 50%; transform: translateY(-50%); color: var(--dk-muted); font-size: .8rem; }
+.ho-search input { padding-left: 2.2rem; }
+.ho-toolbar select { width: auto; min-width: 140px; }
+
+/* cards */
+.ho-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
+.ho-card { display: flex; flex-direction: column; gap: .7rem; padding: 1.1rem 1.2rem; background: #fff; border-radius: 1rem;
+           box-shadow: 0 20px 27px 0 rgba(0,0,0,.05); border-left: 4px solid #cbd5e1; }
+.ho-card.new { border-left-color: var(--dk-primary); background: linear-gradient(180deg, var(--dk-tint-soft), #fff 55%); }
+.ho-card.waiting { border-left-color: #f59e0b; }
+.ho-card.received { border-left-color: var(--dk-primary-light); }
+.ho-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+.ho-ref { font-size: .72rem; font-weight: 700; letter-spacing: .03em; color: var(--dk-primary-dark); background: var(--dk-tint); padding: .2rem .55rem; border-radius: .4rem; }
+.ho-badges { display: flex; flex-wrap: wrap; gap: .35rem; }
+.ho-badge { font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: .2rem .5rem; border-radius: .4rem; background: #eef2f6; color: var(--dk-muted); }
+.ho-badge.new { color: #fff; background-image: var(--dk-gradient); }
+.ho-badge.return { background: #fef3c7; color: #b45309; }
+.ho-badge.forward { background: #dbeafe; color: #1d4ed8; }
+.ho-badge.p-high { background: #ffedd5; color: #c2410c; }
+.ho-badge.p-urgent { background: #fee2e2; color: #b91c1c; }
+.ho-title { margin: 0; font-size: 1rem; font-weight: 700; color: var(--dk-text); word-break: break-word; }
+.ho-desc { margin: 0; font-size: .8rem; color: var(--dk-muted); }
+.ho-person { display: flex; align-items: center; gap: .6rem; font-size: .78rem; color: var(--dk-muted); }
+.ho-person b { color: var(--dk-text); }
+.ho-avatar { width: 2rem; height: 2rem; flex: 0 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+             font-size: .8rem; font-weight: 700; color: #fff; background-image: var(--dk-gradient); }
+.ho-quote { margin: 0; padding: .55rem .8rem; font-size: .78rem; color: var(--dk-text); background: #f6f8fa; border-left: 3px solid var(--dk-primary-light); border-radius: .4rem; }
+.ho-meta { display: flex; flex-wrap: wrap; gap: .3rem .9rem; font-size: .73rem; color: var(--dk-muted); }
+.ho-meta i { margin-right: .25rem; color: var(--dk-primary); }
+.ho-meta .late { color: var(--dk-danger); font-weight: 700; }
+.ho-state { font-size: .76rem; font-weight: 600; }
+.ho-state.waiting { color: #b45309; }
+.ho-state.received { color: var(--dk-primary-dark); }
+.ho-state.recalled { color: var(--dk-muted); }
+.ho-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin-top: auto; padding-top: .7rem; border-top: 1px solid #edf0f3; }
+.ho-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; }
+.ho-icon { display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .65rem; font-size: .72rem; font-weight: 600; border-radius: .5rem; border: 1px solid var(--dk-border);
+           background: #fff; color: var(--dk-muted); text-decoration: none; transition: all .12s; }
+.ho-icon:hover { color: var(--dk-primary-dark); border-color: var(--dk-primary-light); background: var(--dk-tint-soft); }
+.ho-icon.warn:hover { color: #b45309; border-color: #fcd34d; background: #fffbeb; }
+.ho-select { font-size: .74rem; font-weight: 600; padding: .3rem 1.6rem .3rem .6rem; border-radius: .5rem; min-width: 0; }
+.ho-st { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: .22rem .55rem; border-radius: .4rem; background: #eef2f6; color: var(--dk-muted); }
+.ho-st.s-completed { background: var(--dk-tint); color: var(--dk-primary-dark); }
+.ho-st.s-in_progress { background: #dbeafe; color: #1d4ed8; }
+.ho-st.s-returned { background: #fef3c7; color: #b45309; }
+
+/* empty + pager */
+.ho-empty { text-align: center; padding: 3rem 1rem; background: #fff; border-radius: 1rem; box-shadow: 0 20px 27px 0 rgba(0,0,0,.05); }
+.ho-empty .big { width: 4rem; height: 4rem; margin: 0 auto 1rem; border-radius: 1rem; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; color: #fff; background-image: var(--dk-gradient); }
+.ho-pager { display: flex; flex-wrap: wrap; justify-content: center; gap: .35rem; margin: 1.5rem 0 .5rem; }
+.ho-pager a, .ho-pager span { min-width: 2.2rem; padding: .45rem .7rem; text-align: center; font-size: .78rem; font-weight: 600; border-radius: .5rem;
+                              border: 1px solid var(--dk-border); background: #fff; color: var(--dk-muted); text-decoration: none; }
+.ho-pager a:hover { color: var(--dk-primary-dark); border-color: var(--dk-primary-light); }
+.ho-pager .cur { color: #fff; border-color: transparent; background-image: var(--dk-gradient); }
+.ho-pager .gap { border: 0; background: transparent; }

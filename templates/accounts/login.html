@@ -1,0 +1,57 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f766e">
+  <title>Sign in | DokTrak</title>
+  <link rel="stylesheet" href="{% static 'assets/css/auth.css' %}">
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <section class="auth-story" aria-label="About DokTrak">
+      <a class="auth-brand" aria-label="DokTrak home"><span class="brand-mark">D</span><span>DokTrak</span></a>
+      <div class="story-copy">
+        <span class="eyebrow">DOCUMENT WORKSPACE</span>
+        <h1>A clear record<br>for every document.</h1>
+        <p>Track what matters, from first upload to final status.</p>
+        <div class="workspace-card" aria-hidden="true">
+          <div class="workspace-top"><span class="workspace-icon">D</span><span class="workspace-caption">RECENT ACTIVITY</span><span class="workspace-menu">···</span></div>
+          <div class="workspace-row"><span class="file-icon">PDF</span><span class="file-lines"><i></i><i></i></span><span class="status-pill">In review</span></div>
+          <div class="workspace-row"><span class="file-icon file-icon-muted">DOC</span><span class="file-lines"><i></i><i></i></span><span class="status-pill status-done">Filed</span></div>
+        </div>
+      </div>
+      <div class="story-note">A calmer way to keep work moving.</div>
+    </section>
+
+    <section class="auth-panel">
+      <div class="auth-card">
+        <div class="mobile-brand"><span class="brand-mark">D</span><span>DokTrak</span></div>
+        <span class="eyebrow eyebrow-green">YOUR DOKTRAK WORKSPACE</span>
+        <h2>Sign in to DokTrak</h2>
+        <p class="auth-subtitle">Enter your account details to continue.</p>
+        {% if messages %}{% for message in messages %}<div class="auth-success" role="status">{{ message }}</div>{% endfor %}{% endif %}
+
+        <form method="post" class="auth-form">
+          {% csrf_token %}
+          {% if form.non_field_errors %}<div class="form-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+          {% for field in form %}
+            <div class="field-group">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+              {% if field.name == 'password' %}<div class="auth-forgot-row"><a href="{% url 'password_reset' %}">Forgot password?</a></div>{% endif %}
+            </div>
+          {% endfor %}
+          {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+          <button class="auth-submit" type="submit">Sign in <span aria-hidden="true">→</span></button>
+        </form>
+
+        <p class="auth-switch">New to DokTrak? <a href="{% url 'register' %}">Create an account</a></p>
+        <p class="auth-foot">Secure access to your document workspace.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
