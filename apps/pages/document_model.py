@@ -33,7 +33,14 @@ class Document(models.Model):
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="+",
+        
     )
+
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="assigned_documents",
+        )
+        
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -50,3 +57,24 @@ class Document(models.Model):
     @property
     def attachment_name(self):
         return os.path.basename(self.attachment.name) if self.attachment else ""
+
+
+class Transfer(models.Model):
+    """One hand-off of a file from one user to another."""
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="transfers")
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                               on_delete=models.SET_NULL, related_name="sent_transfers")
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                  on_delete=models.SET_NULL, related_name="received_transfers")
+    kind = models.CharField(max_length=10, default="send")      # send / forward / return
+    remark = models.CharField(max_length=300, blank=True)
+    prev_status = models.CharField(max_length=20, blank=True)   # restored if the sender recalls it
+    sent_at = models.DateTimeField(auto_now_add=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+    recalled = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-sent_at"]
+
+    def __str__(self):
+        return f"{self.document.reference_no}: {self.sender} -> {self.recipient}"

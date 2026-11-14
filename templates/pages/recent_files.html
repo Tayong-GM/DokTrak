@@ -22,6 +22,9 @@
              box-shadow: 0 20px 27px 0 rgba(0,0,0,.05); border: 2px solid transparent; transition: transform .12s, border-color .12s; }
   .rf-stat:hover { transform: translateY(-2px); }
   .rf-stat.on { border-color: var(--dk-primary-light); background: var(--dk-tint-soft); }
+  .rf-stat-icon { display: block; height: 1.25rem; margin-bottom: .35rem; color: var(--dk-primary-dark); }
+  .rf-stat-icon svg { width: 1.15rem; height: 1.15rem; vertical-align: middle; }
+  .rf-stat.danger .rf-stat-icon { color: var(--dk-danger); }
   .rf-stat b { display: block; font-size: 1.35rem; color: var(--dk-text); line-height: 1.1; }
   .rf-stat span { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--dk-muted); }
   .rf-stat.danger b { color: var(--dk-danger); }
@@ -85,7 +88,7 @@
   <!-- ===== Top navigation ===== -->
   <div class="dk-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
     <div>
-      <h5 class="text-white mb-1">Recent Files</h5>
+      <div class="d-flex align-items-center gap-2 mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg><h5 class="text-white mb-0">Recent Files</h5></div>
       <p class="text-white opacity-8 text-sm mb-0">Everything you have created, newest first.</p>
     </div>
     <a href="{% url 'create_file' %}" class="dk-btn dk-btn-ghost" style="position:relative;z-index:1;"><i class="fas fa-plus me-1"></i> Add File</a>
@@ -99,13 +102,20 @@
 
   <!-- ===== Summary cards (click to filter) ===== -->
   <div class="rf-stats mb-4">
-    <a class="rf-stat {% if not filters.status %}on{% endif %}" href="{% url 'recent_files' %}"><b>{{ stats.total }}</b><span>All files</span></a>
+    <a class="rf-stat {% if not filters.status %}on{% endif %}" href="{% url 'recent_files' %}"><i class="rf-stat-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></i><b>{{ stats.total }}</b><span>All files</span></a>
     {% for value, label in status_options %}
+      {% if value != 'in_progress' %}
       <a class="rf-stat {% if filters.status == value %}on{% endif %}" href="?status={{ value }}">
-        <b>{% if value == 'pending' %}{{ stats.pending }}{% elif value == 'in_progress' %}{{ stats.in_progress }}{% elif value == 'completed' %}{{ stats.completed }}{% else %}{{ stats.returned }}{% endif %}</b><span>{{ label }}</span>
+        <i class="rf-stat-icon">
+          {% if value == 'pending' %}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          {% elif value == 'completed' %}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>
+          {% else %}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 14-4-4 4-4"/><path d="M5 10h9a5 5 0 0 1 0 10h-2"/></svg>{% endif %}
+        </i>
+        <b>{% if value == 'pending' %}{{ stats.pending }}{% elif value == 'completed' %}{{ stats.completed }}{% else %}{{ stats.returned }}{% endif %}</b><span>{{ label }}</span>
       </a>
+      {% endif %}
     {% endfor %}
-    <a class="rf-stat danger {% if filters.status == 'overdue' %}on{% endif %}" href="?status=overdue"><b>{{ stats.overdue }}</b><span>Overdue</span></a>
+    <a class="rf-stat danger {% if filters.status == 'overdue' %}on{% endif %}" href="?status=overdue"><i class="rf-stat-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10.3 3.9-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3.1l-8-14a2 2 0 0 0-3.4 0z"/><path d="M12 9v4m0 4h.01"/></svg></i><b>{{ stats.overdue }}</b><span>Overdue</span></a>
   </div>
 
   <!-- ===== Search / filter / sort ===== -->

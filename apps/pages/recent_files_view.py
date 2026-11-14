@@ -54,10 +54,41 @@ def recent_files(request):
         sort = "new"
 
     if q:
-        qs = qs.filter(
+        matches = (
             Q(title__icontains=q) | Q(reference_no__icontains=q) | Q(description__icontains=q)
+            | Q(doc_type__icontains=q) | Q(priority__icontains=q) | Q(status__icontains=q)
             | Q(from_office__icontains=q) | Q(to_office__icontains=q)
+            | Q(attachment__icontains=q)
+            | Q(created_by__username__icontains=q) | Q(created_by__first_name__icontains=q)
+            | Q(created_by__last_name__icontains=q) | Q(created_by__email__icontains=q)
+            | Q(assigned_to__username__icontains=q) | Q(assigned_to__first_name__icontains=q)
+            | Q(assigned_to__last_name__icontains=q) | Q(assigned_to__email__icontains=q)
         )
+        name_parts = q.split(maxsplit=1)
+        if len(name_parts) == 2:
+            matches |= (
+                Q(created_by__first_name__icontains=name_parts[0], created_by__last_name__icontains=name_parts[1])
+                | Q(assigned_to__first_name__icontains=name_parts[0], assigned_to__last_name__icontains=name_parts[1])
+            )
+        # Accept the human-readable form of workflow statuses, e.g. "in progress".
+        status_query = q.strip().lower().replace(" ", "_").replace("-", "_")
+        if status_query in dict(STATUS_CHOICES):
+            matches |= Q(status=status_query)
+        # Numeric searches also match the database record ID.
+        if q.isdecimal():
+            matches |= Q(pk=int(q))
+        # Date searches match due, created, or last-updated dates (YYYY-MM-DD).
+        try:
+            searched_date = date.fromisoformat(q)
+        except ValueError:
+            pass
+        else:
+            matches |= Q(due_date=searched_date) | Q(created_at__date=searched_date) | Q(updated_at__date=searched_date)
+        if q.lower() in {"yes", "true", "confidential"}:
+            matches |= Q(confidential=True)
+        elif q.lower() in {"no", "false", "not confidential"}:
+            matches |= Q(confidential=False)
+        qs = qs.filter(matches)
     if status == "overdue":
         qs = qs.filter(due_date__lt=today).exclude(status="completed")
     elif status:
