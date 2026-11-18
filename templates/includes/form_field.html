@@ -38,7 +38,8 @@
       </div>
 
     {% else %}
-      <input type="{{ field.type }}" class="form-control {% if field.error %}is-invalid{% endif %}" id="id_{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}" {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %} {% if field.max_length %}maxlength="{{ field.max_length }}"{% endif %} {% if field.min is not None %}min="{{ field.min }}"{% endif %} {% if field.max is not None %}max="{{ field.max }}"{% endif %} {% if field.readonly %}readonly{% endif %}>
+      <input type="{{ field.type }}" class="form-control {% if field.error %}is-invalid{% endif %}" id="id_{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}" {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %} {% if field.max_length %}maxlength="{{ field.max_length }}"{% endif %} {% if field.min is not None %}min="{{ field.min }}"{% endif %} {% if field.max is not None %}max="{{ field.max }}"{% endif %} {% if field.autocomplete and field.suggestions %}list="{{ field.autocomplete }}"{% endif %} {% if field.readonly %}readonly{% endif %}>
+      {% if field.autocomplete and field.suggestions %}<datalist id="{{ field.autocomplete }}">{% for suggestion in field.suggestions %}<option value="{{ suggestion.value }}" label="{{ suggestion.label }}"></option>{% endfor %}</datalist>{% endif %}
     {% endif %}
   {% endif %}
 

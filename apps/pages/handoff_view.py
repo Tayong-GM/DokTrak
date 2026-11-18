@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .document_model import STATUS_CHOICES, Document, Transfer
+from .document_model import REVIEW_STATUS_CHOICES, STATUS_CHOICES, Document, Transfer
 from .recent_files_view import _options          # priority / type labels from create_file_config.py
 
 User = get_user_model()
@@ -101,9 +101,10 @@ def inbox(request):
         "new": len(new_ids),
         "in_progress": mine.filter(status="in_progress").count(),
         "completed": mine.filter(status="completed").count(),
+        "returned": mine.filter(status="returned").count(),
     }
 
-    qs = mine.annotate(latest_sent=Max("transfers__sent_at", filter=Q(transfers__recipient=me, transfers__recalled=False)))
+    qs = mine.select_related("reviewed_by").annotate(latest_sent=Max("transfers__sent_at", filter=Q(transfers__recipient=me, transfers__recalled=False)))
     if tab == "new":
         qs = qs.filter(pk__in=new_ids)
     if status:
@@ -129,6 +130,7 @@ def inbox(request):
         d.sender_initial = (d.sender_name[:1] or "?").upper()
         d.status_label = status_labels.get(d.status, d.status.title())
         d.priority_label = priority_labels.get(d.priority, d.priority.title())
+        d.reviewed_by_name = display_name(d.reviewed_by)
 
     return render(request, "pages/inbox.html", {
         "segment": "inbox",
@@ -139,6 +141,7 @@ def inbox(request):
         "has_filters": bool(q or status or tab),
         "people": _people(me),
         "work_statuses": [(v, l) for v, l in STATUS_CHOICES if v != "returned"],
+        "review_statuses": REVIEW_STATUS_CHOICES,
         **_pager_context(request, paginator, page_obj),
     })
 
@@ -148,7 +151,13 @@ def inbox(request):
 def receive_file(request, pk):
     doc = get_object_or_404(Document, pk=pk, assigned_to=request.user)
     if _mark_received(doc, request.user):
-        messages.success(request, f"{doc.reference_no} marked as received.")
+        if doc.status == "pending":
+            doc.status = "in_progress"
+            doc.save(update_fields=["status", "updated_at"])
+        if doc.status == "in_progress":
+            messages.success(request, f"{doc.reference_no} received and moved to In progress.")
+        else:
+            messages.success(request, f"{doc.reference_no} marked as received.")
     return _back(request)
 
 
@@ -164,6 +173,27 @@ def inbox_status(request, pk):
     doc.status = status
     doc.save(update_fields=["status", "updated_at"])
     messages.success(request, f"{doc.reference_no} is now {dict(STATUS_CHOICES)[status]}.")
+    return _back(request)
+
+
+@login_required
+@require_POST
+def review_file(request, pk):
+    doc = get_object_or_404(Document, pk=pk, assigned_to=request.user, is_archived=False)
+    incoming = Transfer.objects.filter(
+        document=doc, recipient=request.user, recalled=False,
+    ).first()
+    review_status = request.POST.get("review_status", "")
+    if not incoming or not incoming.received_at:
+        messages.error(request, "Receive the file before reviewing it.")
+    elif review_status not in dict(REVIEW_STATUS_CHOICES):
+        messages.error(request, "Choose Approved, Rejected, or Checked.")
+    else:
+        doc.review_status = review_status
+        doc.reviewed_by = request.user
+        doc.reviewed_at = timezone.now()
+        doc.save(update_fields=["review_status", "reviewed_by", "reviewed_at", "updated_at"])
+        messages.success(request, f"{doc.reference_no} review updated to {dict(REVIEW_STATUS_CHOICES)[review_status]}.")
     return _back(request)
 
 

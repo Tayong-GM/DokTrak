@@ -1,5 +1,9 @@
 FROM python:3.9
 
+# Tesseract is the system OCR engine used to read scanned paper documents.
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1

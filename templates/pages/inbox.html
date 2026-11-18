@@ -30,6 +30,7 @@
     <a class="ho-chip hot {% if filters.tab == 'new' %}on{% endif %}" href="?tab=new"><b>{{ stats.new }}</b><span>New</span></a>
     <a class="ho-chip {% if filters.status == 'in_progress' %}on{% endif %}" href="?status=in_progress"><b>{{ stats.in_progress }}</b><span>In progress</span></a>
     <a class="ho-chip {% if filters.status == 'completed' %}on{% endif %}" href="?status=completed"><b>{{ stats.completed }}</b><span>Completed</span></a>
+    <a class="ho-chip {% if filters.status == 'returned' %}on{% endif %}" href="?status=returned"><b>{{ stats.returned }}</b><span>Returned</span></a>
   </div>
 
   <form method="get" class="card dk-card mb-4" id="filterForm">
@@ -59,6 +60,7 @@
           {% if f.is_new %}<span class="ho-badge new">New</span>{% endif %}
           {% if f.incoming.kind == 'return' %}<span class="ho-badge return">Returned to you</span>{% elif f.incoming.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
           <span class="ho-badge p-{{ f.priority }}">{{ f.priority_label }}</span>
+      {% if f.review_status %}<span class="ho-badge review-{{ f.review_status }}">{{ f.get_review_status_display }}</span>{% endif %}
         </div>
       </div>
 
@@ -74,6 +76,8 @@
       </div>
       {% if f.incoming.remark %}<p class="ho-quote">{{ f.incoming.remark }}</p>{% endif %}
       {% endif %}
+
+      {% if f.review_status %}<p class="ho-review-info">Updated by <b>{{ f.reviewed_by_name }}</b> · {{ f.reviewed_at|date:"M d, Y g:i A" }}</p>{% endif %}
 
       <div class="ho-meta">
         {% if f.due_date %}<span class="{% if f.is_overdue %}late{% endif %}"><i class="far fa-calendar-alt"></i>{% if f.is_overdue %}Overdue &middot; {% else %}Due {% endif %}{{ f.due_date|date:"M d, Y" }}</span>{% endif %}
@@ -94,11 +98,18 @@
               {% if f.status == 'returned' %}<option value="returned" selected disabled>Returned</option>{% endif %}
             </select>
           </form>
+          <form method="post" action="{% url 'review_file' f.pk %}" class="ho-review-form">
+            {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <select name="review_status" class="form-select ho-select" aria-label="Review result" onchange="this.form.submit()">
+              <option value="" disabled {% if not f.review_status %}selected{% endif %}>Review result</option>
+              {% for value, label in review_statuses %}<option value="{{ value }}" {% if f.review_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </form>
         {% endif %}
         <div class="ho-actions">
           <button type="button" class="ho-icon" data-bs-toggle="modal" data-bs-target="#handoffModal" data-mode="forward"
                   data-action="{% url 'forward_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}"><i class="fas fa-share"></i> Forward</button>
-          {% if f.incoming %}
+          {% if f.incoming and not f.is_new %}
           <button type="button" class="ho-icon warn" data-bs-toggle="modal" data-bs-target="#handoffModal" data-mode="return"
                   data-action="{% url 'forward_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}" data-to="{{ f.sender_name }}"><i class="fas fa-undo"></i> Return</button>
           {% endif %}
