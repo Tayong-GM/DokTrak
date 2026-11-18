@@ -43,7 +43,7 @@ def _safe_next(request, default="recent_files"):
 # ---------------------------------------------------------------------------
 def recent_files(request):
     today = timezone.localdate()
-    qs = Document.objects.all()
+    qs = Document.objects.filter(is_archived=False)
 
     q = request.GET.get("q", "").strip()
     status = request.GET.get("status", "")
@@ -100,7 +100,7 @@ def recent_files(request):
     qs = qs.order_by(*SORTS[sort][1])
 
     # summary cards (always over all files, not just the filtered ones)
-    all_docs = Document.objects.all()
+    all_docs = Document.objects.filter(is_archived=False)
     stats = {
         "total": all_docs.count(),
         "overdue": all_docs.filter(due_date__lt=today).exclude(status="completed").count(),
@@ -132,8 +132,28 @@ def recent_files(request):
         "qs": params.urlencode(),
         "type_options": _options("doc_type"),
         "priority_options": _options("priority"),
-        "status_options": STATUS_CHOICES,
         "sort_options": [(k, v[0]) for k, v in SORTS.items()],
+    })
+
+
+def archived_files(request):
+    q = request.GET.get("q", "").strip()
+    qs = Document.objects.filter(is_archived=True)
+    if q:
+        qs = qs.filter(
+            Q(title__icontains=q) | Q(reference_no__icontains=q)
+            | Q(description__icontains=q) | Q(doc_type__icontains=q)
+            | Q(from_office__icontains=q) | Q(to_office__icontains=q)
+            | Q(attachment__icontains=q)
+        )
+    paginator = Paginator(qs.order_by("-archived_at", "-created_at"), PAGE_SIZE)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    params = request.GET.copy()
+    params.pop("page", None)
+    return render(request, "pages/archived_files.html", {
+        "segment": "archived_files", "page_obj": page_obj, "q": q,
+        "result_count": paginator.count, "qs": params.urlencode(),
+        "page_range": paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1),
     })
 
 
@@ -205,8 +225,18 @@ def edit_file(request, pk):
 
 
 # ---------------------------------------------------------------------------
-# DELETE / QUICK STATUS CHANGE  (POST only)
+# ARCHIVE / DELETE  (POST only)
 # ---------------------------------------------------------------------------
+@require_POST
+def archive_file(request, pk):
+    doc = get_object_or_404(Document, pk=pk, is_archived=False)
+    doc.is_archived = True
+    doc.archived_at = timezone.now()
+    doc.save(update_fields=["is_archived", "archived_at", "updated_at"])
+    messages.success(request, f"File {doc.reference_no} was archived.")
+    return redirect(_safe_next(request))
+
+
 @require_POST
 def delete_file(request, pk):
     doc = get_object_or_404(Document, pk=pk)
@@ -215,17 +245,4 @@ def delete_file(request, pk):
         doc.attachment.delete(save=False)                 # don't leave orphan files on disk
     doc.delete()
     messages.success(request, f"File {ref} was deleted.")
-    return redirect(_safe_next(request))
-
-
-@require_POST
-def update_file_status(request, pk):
-    doc = get_object_or_404(Document, pk=pk)
-    status = request.POST.get("status", "")
-    if status in dict(STATUS_CHOICES):
-        doc.status = status
-        doc.save(update_fields=["status", "updated_at"])
-        messages.success(request, f"{doc.reference_no} marked as {dict(STATUS_CHOICES)[status]}.")
-    else:
-        messages.error(request, "Invalid status.")
     return redirect(_safe_next(request))

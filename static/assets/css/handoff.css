@@ -32,6 +32,9 @@ a.dk-btn { display: inline-block; text-decoration: none; }
 .ho-badge { font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: .2rem .5rem; border-radius: .4rem; background: #eef2f6; color: var(--dk-muted); }
 .ho-badge.new { color: #fff; background-image: var(--dk-gradient); }
 .ho-badge.return { background: #fef3c7; color: #b45309; }
+.ho-badge.review-approved { background: #dcfce7; color: #15803d; }
+.ho-badge.review-rejected { background: #fee2e2; color: #b91c1c; }
+.ho-badge.review-checked { background: #dbeafe; color: #1d4ed8; }
 .ho-badge.forward { background: #dbeafe; color: #1d4ed8; }
 .ho-badge.p-high { background: #ffedd5; color: #c2410c; }
 .ho-badge.p-urgent { background: #fee2e2; color: #b91c1c; }
@@ -42,6 +45,9 @@ a.dk-btn { display: inline-block; text-decoration: none; }
 .ho-avatar { width: 2rem; height: 2rem; flex: 0 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center;
              font-size: .8rem; font-weight: 700; color: #fff; background-image: var(--dk-gradient); }
 .ho-quote { margin: 0; padding: .55rem .8rem; font-size: .78rem; color: var(--dk-text); background: #f6f8fa; border-left: 3px solid var(--dk-primary-light); border-radius: .4rem; }
+.ho-review-info { margin: 0; color: var(--dk-muted); font-size: .74rem; }
+.ho-review-info b { color: var(--dk-text); }
+.ho-review-form { min-width: 125px; }
 .ho-meta { display: flex; flex-wrap: wrap; gap: .3rem .9rem; font-size: .73rem; color: var(--dk-muted); }
 .ho-meta i { margin-right: .25rem; color: var(--dk-primary); }
 .ho-meta .late { color: var(--dk-danger); font-weight: 700; }

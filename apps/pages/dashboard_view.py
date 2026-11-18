@@ -32,10 +32,17 @@ def dashboard(request):
     total = sum(counts.values())
     overdue = docs.filter(due_date__lt=today).exclude(status="completed").count()
     completed = counts.get("completed", 0)
+    returned_to_user = Document.objects.filter(
+        assigned_to=request.user, status="returned",
+    ).count()
     stats = {
         "total": total,
         "overdue": overdue,
-        "by_status": [(v, label, counts.get(v, 0)) for v, label in STATUS_CHOICES],
+        "returned": returned_to_user,
+        "by_status": [
+            (v, label, returned_to_user if v == "returned" else counts.get(v, 0))
+            for v, label in STATUS_CHOICES
+        ],
         "rate": round(completed * 100 / total) if total else 0,
     }
 

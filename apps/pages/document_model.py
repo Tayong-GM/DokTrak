@@ -11,6 +11,11 @@ STATUS_CHOICES = [
     ("completed", "Completed"),
     ("returned", "Returned"),
 ]
+REVIEW_STATUS_CHOICES = [
+    ("approved", "Approved"),
+    ("rejected", "Rejected"),
+    ("checked", "Checked"),
+]
 
 
 class Document(models.Model):
@@ -28,7 +33,15 @@ class Document(models.Model):
     priority = models.CharField(max_length=20, default="normal")
     due_date = models.DateField(null=True, blank=True)
     confidential = models.BooleanField(default=False)
+    is_archived = models.BooleanField(default=False)
+    archived_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, default="pending")
+    review_status = models.CharField(max_length=20, blank=True, choices=REVIEW_STATUS_CHOICES)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="reviewed_documents",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
     attachment = models.FileField(upload_to="documents/%Y/%m/", blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,

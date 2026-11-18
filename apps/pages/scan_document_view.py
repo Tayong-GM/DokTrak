@@ -1,11 +1,10 @@
 import copy
-import uuid
 from datetime import date
 
-from django.contrib import messages
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 
-from .create_file_view import _clean_value          # reuse the same field validation
+from .create_file_view import _clean_value
+from .document_matching import OCRUnavailable, extract_text, find_document_match
 from .scan_document_config import PAGE, SECTIONS
 
 
@@ -15,20 +14,6 @@ from .scan_document_config import PAGE, SECTIONS
 # `files` -> uploaded files keyed by field name   (files["scan_file"])
 # Return the scan number shown in the success message.
 # ---------------------------------------------------------------------------
-def save_scan(data, files, request):
-    ref = f"{PAGE['reference_prefix']}-{date.today():%Y}-{uuid.uuid4().hex[:6].upper()}"
-
-    # Example: save to a model
-    # Scan.objects.create(scan_no=ref, uploaded_by=request.user, **data)
-
-    # Example: store the upload (needs MEDIA_ROOT set in settings)
-    # from django.core.files.storage import default_storage
-    # f = files["scan_file"]
-    # default_storage.save(f"scans/{ref}/{f.name}", f)
-
-    return ref
-
-
 def _clean_scan_file(f, upload):
     if not upload:
         return None, ("Please upload a file." if f.get("required") else None)
@@ -48,6 +33,9 @@ def scan_document(request):
         f["error"] = None
 
     has_errors = False
+    match = None
+    scan_result = None
+    scan_error = None
 
     if request.method == "POST":
         data, files = {}, {}
@@ -65,9 +53,17 @@ def scan_document(request):
             has_errors = has_errors or bool(f["error"])
 
         if not has_errors:
-            ref = save_scan(data, files, request)
-            messages.success(request, PAGE["success_message"].format(reference_no=ref))
-            return redirect("scan_document")
+            uploaded = files.get("scan_file")
+            try:
+                scan_result = extract_text(uploaded, uploaded.name)
+                if scan_result.strip():
+                    match = find_document_match(scan_result)
+                else:
+                    scan_error = "We couldn't read text from this scan. Try a clearer, well-lit image or a searchable PDF."
+            except OCRUnavailable:
+                scan_error = "Text recognition isn't available. Install Tesseract OCR on the server and the pytesseract, Pillow, and PyMuPDF packages to search scans."
+            except Exception:
+                scan_error = "We couldn't read this file. Try a clear image or PDF scan."
     else:
         for f in fields:
             default = f.get("default", "")
@@ -81,4 +77,8 @@ def scan_document(request):
         "page": PAGE,
         "sections": sections,
         "has_errors": has_errors,
+        "match": match,
+        "scan_result": scan_result,
+        "scan_error": scan_error,
+        "searched": request.method == "POST" and not has_errors,
     })

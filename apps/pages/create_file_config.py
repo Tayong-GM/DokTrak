@@ -23,8 +23,8 @@ FIELD OPTIONS
 
 PAGE = {
     "title": "Create File",
-    "subtitle": "Register a new document so it can be tracked from start to finish.",
-    "submit_label": "Create File",
+    "subtitle": "Create the document and send it straight to its destination.",
+    "submit_label": "Create & Send",
     "success_message": "File {reference_no} was created successfully.",
     "reference_prefix": "DOK",     # DOK-2026-A1B2C3
     "max_upload_mb": 10,
@@ -47,13 +47,14 @@ SECTIONS = [
     },
     {
         "title": "Routing",
-        "description": "Where the file comes from, where it goes, and how urgent it is.",
+        "description": "Choose the person or office that should receive this file.",
         "icon": "fa-route",
         "fields": [
             {"name": "from_office", "label": "From (office / person)", "type": "text",
              "required": True, "max_length": 100, "col": 6},
-            {"name": "to_office", "label": "To (office / person)", "type": "text",
-             "required": True, "max_length": 100, "col": 6},
+            {"name": "to_office", "label": "Send directly to", "type": "text",
+             "required": True, "max_length": 100, "col": 6,
+             "autocomplete": "routing-destinations"},
             {"name": "priority", "label": "Priority", "type": "radio", "required": True,
              "default": "normal", "col": 8,
              "options": [("low", "Low"), ("normal", "Normal"), ("high", "High"), ("urgent", "Urgent")]},

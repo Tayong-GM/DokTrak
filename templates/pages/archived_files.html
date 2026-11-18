@@ -1,0 +1,62 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block title %}Archived Files{% endblock title %}
+
+{% block extra_css %}
+<link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
+<style>
+  .af-card { background:#fff; border-radius:1rem; padding:1rem 1.2rem; margin-bottom:.85rem; box-shadow:0 20px 27px rgba(0,0,0,.05); border-left:4px solid var(--dk-primary-light); }
+  .af-top,.af-foot { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+  .af-ref { color:var(--dk-primary-dark); background:var(--dk-tint); padding:.2rem .55rem; border-radius:.4rem; font-size:.72rem; font-weight:700; }
+  .af-title { color:var(--dk-text); font-size:1rem; font-weight:700; margin:.55rem 0; }
+  .af-meta { color:var(--dk-muted); font-size:.76rem; }
+  .af-actions { display:flex; gap:.4rem; }
+  .rf-icon { display:inline-flex; align-items:center; justify-content:center; width:2rem; height:2rem; border-radius:.5rem; border:1px solid var(--dk-border); background:#fff; color:var(--dk-muted); text-decoration:none; }
+  .rf-icon:hover { color:var(--dk-primary-dark); border-color:var(--dk-primary-light); background:var(--dk-tint-soft); }
+  .rf-icon.del:hover { color:#b91c1c; border-color:#fca5a5; background:#fef2f2; }
+  .af-empty {min-height: 260px;display: flex;flex-direction: column;justify-content: center;text-align: center;padding: 3rem 1rem;background: #fff;border-radius: 1rem;}
+  .af-search { max-width:34rem; }
+  .af-pager { display:flex; justify-content:center; gap:.4rem; margin:1rem; }
+  .af-pager a,.af-pager span { padding:.4rem .7rem; border:1px solid var(--dk-border); border-radius:.5rem; background:#fff; text-decoration:none; color:var(--dk-muted); }
+</style>
+{% endblock extra_css %}
+
+{% block content %}
+<div class="container-fluid py-4 dk">
+  <div class="dk-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1"><i class="fas fa-archive text-white"></i><h5 class="text-white mb-0">Archived Files</h5></div>
+      <p class="text-white opacity-8 text-sm mb-0">{{ result_count }} archived file{{ result_count|pluralize }}. Search, open, or delete an archived file.</p>
+    </div>
+  </div>
+
+  {% for message in messages %}<div class="dk-alert mb-3" role="status">{{ message }}</div>{% endfor %}
+
+  <form method="get" class="af-search mb-4" role="search" aria-label="Search archived files">
+    <div class="input-group"><span class="input-group-text"><i class="fas fa-search"></i></span><input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search title, reference, description…" aria-label="Search archived files"><button class="dk-btn" type="submit">Search</button></div>
+  </form>
+
+  {% for f in page_obj %}
+    <article class="af-card">
+      <div class="af-top"><span class="af-ref">{{ f.reference_no }}</span><span class="af-meta">Archived {% if f.archived_at %}{{ f.archived_at|timesince }} ago{% else %}recently{% endif %}</span></div>
+      <h2 class="af-title">{{ f.title }}</h2>
+      {% if f.description %}<p class="af-meta mb-2">{{ f.description|truncatechars:180 }}</p>{% endif %}
+      <div class="af-foot"><div class="af-meta">{{ f.doc_type|default:"File" }}{% if f.from_office or f.to_office %} · {{ f.from_office|default:"?" }} → {{ f.to_office|default:"?" }}{% endif %}</div>
+        <div class="af-actions">
+          {% if f.attachment %}<a class="rf-icon" href="{{ f.attachment.url }}" target="_blank" rel="noopener" title="Open attachment" aria-label="Open {{ f.reference_no }}"><i class="fas fa-folder-open"></i></a>{% endif %}
+          <form method="post" action="{% url 'delete_file' f.pk %}" onsubmit="return confirm('Permanently delete {{ f.reference_no }}? This also removes its attachment.');">
+            {% csrf_token %}<input type="hidden" name="next" value="{% url 'archived_files' %}{% if q %}?q={{ q|urlencode }}{% endif %}">
+            <button type="submit" class="rf-icon del" title="Delete" aria-label="Delete {{ f.reference_no }}"><i class="fas fa-trash"></i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6"/></svg></button>
+            
+          </form>
+        </div>
+      </div>
+    </article>
+  {% empty %}
+    <div class="af-empty"><i class="fas fa-box-open fa-2x mb-3"></i><h6>{% if q %}No archived files match your search{% else %}No archived files yet{% endif %}</h6><p class="text-sm text-secondary mb-0">{% if q %}Try another search term.{% else %}Files you archive from Recent Files will appear here.{% endif %}</p></div>
+  {% endfor %}
+
+  {% if page_obj.paginator.num_pages > 1 %}<nav class="af-pager" aria-label="Pages">{% if page_obj.has_previous %}<a href="?{% if qs %}{{ qs }}&{% endif %}page={{ page_obj.previous_page_number }}">&laquo;</a>{% endif %}{% for p in page_range %}{% if p == page_obj.paginator.ELLIPSIS %}<span>&hellip;</span>{% elif p == page_obj.number %}<span>{{ p }}</span>{% else %}<a href="?{% if qs %}{{ qs }}&{% endif %}page={{ p }}">{{ p }}</a>{% endif %}{% endfor %}{% if page_obj.has_next %}<a href="?{% if qs %}{{ qs }}&{% endif %}page={{ page_obj.next_page_number }}">&raquo;</a>{% endif %}</nav>{% endif %}
+</div>
+{% endblock content %}
