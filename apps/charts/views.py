@@ -1,13 +1,15 @@
-from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
 from django.core import serializers
-from apps.pages.models import *
+from django.shortcuts import render
 
-# Create your views here.
+from apps.pages.models import Product
 
+
+@login_required
 def index(request):
-  products = serializers.serialize('json', Product.objects.all())
-  context = {
-    'segment': 'charts',
-    'products': products
-  }
-  return render(request, 'charts/index.html', context)
+    products = serializers.serialize('json', Product.objects.all())
+    context = {
+        'segment': 'charts',
+        'products': products
+    }
+    return render(request, 'charts/index.html', context)

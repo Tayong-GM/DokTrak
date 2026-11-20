@@ -9,7 +9,26 @@ def split_full_name(value):
     return (parts[0], parts[1] if len(parts) > 1 else "") if parts else ("", "")
 
 
-class DokTrakRegistrationForm(UserCreationForm):
+class FullNameDepartmentSaveMixin:
+    """Shared save() for forms with `full_name` and `department` fields.
+
+    Splits full_name into first/last name on the user and saves the department
+    on the user's DepartmentProfile. Put it BEFORE the Django form base class.
+    """
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.first_name, user.last_name = split_full_name(self.cleaned_data["full_name"])
+        if commit:
+            user.save()
+            self.save_m2m()
+            DepartmentProfile.objects.update_or_create(
+                user=user, defaults={"department": self.cleaned_data["department"]}
+            )
+        return user
+
+
+class DokTrakRegistrationForm(FullNameDepartmentSaveMixin, UserCreationForm):
     full_name = forms.CharField(
         label="Full name",
         max_length=150,
@@ -52,20 +71,8 @@ class DokTrakRegistrationForm(UserCreationForm):
         super().__init__(*args, **kwargs)
         self.order_fields(("username", "full_name", "email", "department", "password1", "password2"))
 
-    def save(self, commit=True):
-        user = super().save(commit=False)
-        user.first_name, user.last_name = split_full_name(self.cleaned_data["full_name"])
-        user.email = self.cleaned_data.get("email", "")
-        if commit:
-            user.save()
-            self.save_m2m()
-            DepartmentProfile.objects.update_or_create(
-                user=user, defaults={"department": self.cleaned_data["department"]}
-            )
-        return user
 
-
-class UserProfileForm(forms.ModelForm):
+class UserProfileForm(FullNameDepartmentSaveMixin, forms.ModelForm):
     full_name = forms.CharField(
         label="Full name",
         max_length=150,
@@ -101,13 +108,3 @@ class UserProfileForm(forms.ModelForm):
             self.fields["full_name"].initial = self.instance.get_full_name()
             profile, _ = DepartmentProfile.objects.get_or_create(user=self.instance)
             self.fields["department"].initial = profile.department
-
-    def save(self, commit=True):
-        user = super().save(commit=False)
-        user.first_name, user.last_name = split_full_name(self.cleaned_data["full_name"])
-        if commit:
-            user.save()
-            DepartmentProfile.objects.update_or_create(
-                user=user, defaults={"department": self.cleaned_data["department"]}
-            )
-        return user

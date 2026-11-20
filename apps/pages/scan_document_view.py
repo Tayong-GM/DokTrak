@@ -1,36 +1,19 @@
-import copy
+import logging
 from datetime import date
 
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
-from .create_file_view import _clean_value
-from .document_matching import OCRUnavailable, extract_text, find_document_match
+from .create_file_view import _clean_file, _clean_value, build_form_fields
+from .document_matching import UNREADABLE_FILE_ERRORS, OCRUnavailable, extract_text, find_document_match
 from .scan_document_config import PAGE, SECTIONS
 
-
-# ---------------------------------------------------------------------------
-# WHAT HAPPENS WHEN THE FORM IS VALID: change this function only.
-# `data`  -> cleaned values keyed by field name   (data["reference_no"], data["ocr"], ...)
-# `files` -> uploaded files keyed by field name   (files["scan_file"])
-# Return the scan number shown in the success message.
-# ---------------------------------------------------------------------------
-def _clean_scan_file(f, upload):
-    if not upload:
-        return None, ("Please upload a file." if f.get("required") else None)
-    exts = [e.strip().lower() for e in f.get("accept", "").split(",") if e.strip().startswith(".")]
-    if exts and not any(upload.name.lower().endswith(e) for e in exts):
-        return None, f"Allowed file types: {', '.join(exts)}"
-    if upload.size > PAGE["max_upload_mb"] * 1024 * 1024:
-        return None, f"File is larger than {PAGE['max_upload_mb']} MB."
-    return upload, None
+logger = logging.getLogger(__name__)
 
 
+@login_required
 def scan_document(request):
-    sections = copy.deepcopy(SECTIONS)
-    fields = [f for s in sections for f in s["fields"]]
-    for f in fields:
-        f["options"] = [(str(v), label) for v, label in f.get("options", [])]
-        f["error"] = None
+    sections, fields = build_form_fields(SECTIONS)
 
     has_errors = False
     match = None
@@ -42,7 +25,8 @@ def scan_document(request):
         for f in fields:
             name = f["name"]
             if f["type"] == "file":
-                value, f["error"] = _clean_scan_file(f, request.FILES.get(name))
+                # Uses this page's own upload limit, not the Create File one.
+                value, f["error"] = _clean_file(f, request.FILES.get(name), PAGE["max_upload_mb"])
                 files[name] = value
             else:
                 raw = request.POST.get(name)
@@ -62,7 +46,8 @@ def scan_document(request):
                     scan_error = "We couldn't read text from this scan. Try a clearer, well-lit image or a searchable PDF."
             except OCRUnavailable:
                 scan_error = "Text recognition isn't available. Install Tesseract OCR on the server and the pytesseract, Pillow, and PyMuPDF packages to search scans."
-            except Exception:
+            except UNREADABLE_FILE_ERRORS:
+                logger.exception("Could not read scan %r", uploaded.name)
                 scan_error = "We couldn't read this file. Try a clear image or PDF scan."
     else:
         for f in fields:

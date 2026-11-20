@@ -1,26 +1,34 @@
 import requests, base64, json, csv
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
 from django.utils.safestring import mark_safe
 from django.conf import settings
 from django.urls import reverse
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
-from django.urls import reverse
 from django.views import View
+from django.views.decorators.http import require_POST
 from django.db import models
-from pprint import pp 
+from pprint import pp
 
 from apps.dyn_dt.models import ModelFilter, PageItems, HideShowFilter
 from apps.dyn_dt.utils import user_filter
 
-from cli import *
+from cli import name_to_class, get_model_fk, get_model_fk_values
 
 # Create your views here.
 
+
+def _back(request):
+    """Redirect to the page the user came from, or the dynamic datatable index."""
+    return redirect(request.META.get('HTTP_REFERER') or 'dynamic_dt')
+
+
+@login_required
 def index(request):
-    
+
     context = {
         'routes' : settings.DYNAMIC_DATATB.keys(),
         'segment': 'dyn_dt'
@@ -28,6 +36,8 @@ def index(request):
 
     return render(request, 'dyn_dt/index.html', context)
 
+
+@login_required
 def create_filter(request, model_name):
     model_name = model_name.lower()
     if request.method == "POST":
@@ -44,8 +54,10 @@ def create_filter(request, model_name):
             )
 
         return redirect(reverse('model_dt', args=[model_name]))
+    return redirect(reverse('model_dt', args=[model_name]))
 
 
+@login_required
 def create_page_items(request, model_name):
     model_name = model_name.lower()
     if request.method == 'POST':
@@ -55,8 +67,10 @@ def create_page_items(request, model_name):
             defaults={'items_per_page':items}
         )
         return redirect(reverse('model_dt', args=[model_name]))
+    return redirect(reverse('model_dt', args=[model_name]))
 
 
+@login_required
 def create_hide_show_filter(request, model_name):
     model_name = model_name.lower()
     if request.method == "POST":
@@ -75,9 +89,10 @@ def create_hide_show_filter(request, model_name):
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
 
+@login_required
 def delete_filter(request, model_name, id):
     model_name = model_name.lower()
-    filter_instance = ModelFilter.objects.get(id=id, parent=model_name)
+    filter_instance = get_object_or_404(ModelFilter, id=id, parent=model_name)
     filter_instance.delete()
     return redirect(reverse('model_dt', args=[model_name]))
 
@@ -89,6 +104,8 @@ def get_model_field_names(model, field_type):
         if isinstance(field, field_type)
     ]
 
+
+@login_required
 def model_dt(request, aPath):
     aModelName  = None
     aModelClass = None
@@ -184,7 +201,7 @@ def model_dt(request, aPath):
     return render(request, 'dyn_dt/model.html', context)
 
 
-@login_required(login_url='/accounts/login/')
+@login_required
 def create(request, aPath):
     aModelClass = None
 
@@ -211,10 +228,11 @@ def create(request, aPath):
 
         aModelClass.objects.create(**data)
 
-    return redirect(request.META.get('HTTP_REFERER'))
+    return _back(request)
 
 
-@login_required(login_url='/accounts/login/')
+@login_required
+@require_POST
 def delete(request, aPath, id):
     aModelClass = None
 
@@ -225,12 +243,12 @@ def delete(request, aPath, id):
     if not aModelClass:
         return HttpResponse( ' > ERR: Getting ModelClass for path: ' + aPath )
     
-    item = aModelClass.objects.get(id=id)
+    item = get_object_or_404(aModelClass, id=id)
     item.delete()
-    return redirect(request.META.get('HTTP_REFERER'))
+    return _back(request)
 
 
-@login_required(login_url='/accounts/login/')
+@login_required
 def update(request, aPath, id):
     aModelClass = None
 
@@ -241,7 +259,7 @@ def update(request, aPath, id):
     if not aModelClass:
         return HttpResponse( ' > ERR: Getting ModelClass for path: ' + aPath )
 
-    item = aModelClass.objects.get(id=id)
+    item = get_object_or_404(aModelClass, id=id)
     fk_fields = get_model_fk(aModelClass)
 
     if request.method == 'POST':
@@ -260,12 +278,12 @@ def update(request, aPath, id):
         
         item.save()
 
-    return redirect(request.META.get('HTTP_REFERER'))
+    return _back(request)
 
 
 
 # Export as CSV
-class ExportCSVView(View):
+class ExportCSVView(LoginRequiredMixin, View):
     def get(self, request, aPath):
         aModelName  = None
         aModelClass = None

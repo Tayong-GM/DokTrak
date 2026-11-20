@@ -1,17 +1,23 @@
-"""Inbox (files sent to you) and Sent (files you sent to others) + the actions between them."""
+"""Inbox (files sent to you) and Sent (files you sent to others) + the actions between them.
+
+All rules about which status / review / send / recall moves are allowed live on the
+models (Document.status_change_error, review_error, send_error and
+Transfer.recall_error in document_model.py). The views only look the objects up,
+ask the model, and show its message.
+"""
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import F, Max, Q
+from django.db.models import Count, Exists, F, Max, OuterRef, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .document_model import REVIEW_STATUS_CHOICES, STATUS_CHOICES, Document, Transfer
-from .recent_files_view import _options          # priority / type labels from create_file_config.py
+from .recent_files_view import _pager_context, attach_labels
 
 User = get_user_model()
 PAGE_SIZE = 9
@@ -69,16 +75,10 @@ def _hand_off(doc, sender, recipient, remark, kind, status):
 
 def _holdable(me):
     """Files you currently hold and may send: yours that nobody has, or ones assigned to you."""
-    return Document.objects.filter(Q(assigned_to=me) | Q(created_by=me, assigned_to__isnull=True))
-
-
-def _pager_context(request, paginator, page_obj):
-    params = request.GET.copy()
-    params.pop("page", None)
-    return {
-        "page_range": paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1),
-        "qs": params.urlencode(),
-    }
+    return Document.objects.filter(
+        Q(assigned_to=me) | Q(created_by=me, assigned_to__isnull=True),
+        is_archived=False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -91,22 +91,24 @@ def inbox(request):
     status = request.GET.get("status", "")
     tab = request.GET.get("tab", "")
 
-    new_ids = set(
-        Transfer.objects.filter(recipient=me, recalled=False, received_at__isnull=True, document__assigned_to=me)
-        .values_list("document_id", flat=True)
-    )
-    mine = Document.objects.filter(assigned_to=me)
+    mine = Document.objects.filter(assigned_to=me, is_archived=False)
+    is_new = Exists(Transfer.objects.filter(
+        document=OuterRef("pk"), recipient=me, recalled=False, received_at__isnull=True,
+    ))
+    counts = dict(mine.values_list("status").annotate(n=Count("id")).order_by())
     stats = {
-        "total": mine.count(),
-        "new": len(new_ids),
-        "in_progress": mine.filter(status="in_progress").count(),
-        "completed": mine.filter(status="completed").count(),
-        "returned": mine.filter(status="returned").count(),
+        "total": sum(counts.values()),
+        "new": mine.filter(is_new).count(),
+        "in_progress": counts.get("in_progress", 0),
+        "completed": counts.get("completed", 0),
+        "returned": counts.get("returned", 0),
     }
 
-    qs = mine.select_related("reviewed_by").annotate(latest_sent=Max("transfers__sent_at", filter=Q(transfers__recipient=me, transfers__recalled=False)))
+    qs = mine.select_related("reviewed_by").annotate(
+        latest_sent=Max("transfers__sent_at", filter=Q(transfers__recipient=me, transfers__recalled=False))
+    )
     if tab == "new":
-        qs = qs.filter(pk__in=new_ids)
+        qs = qs.filter(is_new)
     if status:
         qs = qs.filter(status=status)
     if q:
@@ -121,15 +123,13 @@ def inbox(request):
     for t in Transfer.objects.filter(document__in=docs, recipient=me, recalled=False).select_related("sender"):
         incoming.setdefault(t.document_id, t)        # Transfer is ordered newest first
 
-    status_labels, priority_labels = dict(STATUS_CHOICES), dict(_options("priority"))
+    attach_labels(docs, status=True, priority=True)
     for d in docs:
         t = incoming.get(d.pk)
         d.incoming = t
         d.is_new = bool(t and t.received_at is None)
         d.sender_name = display_name(t.sender) if t else ""
         d.sender_initial = (d.sender_name[:1] or "?").upper()
-        d.status_label = status_labels.get(d.status, d.status.title())
-        d.priority_label = priority_labels.get(d.priority, d.priority.title())
         d.reviewed_by_name = display_name(d.reviewed_by)
 
     return render(request, "pages/inbox.html", {
@@ -149,9 +149,9 @@ def inbox(request):
 @login_required
 @require_POST
 def receive_file(request, pk):
-    doc = get_object_or_404(Document, pk=pk, assigned_to=request.user)
+    doc = get_object_or_404(Document, pk=pk, assigned_to=request.user, is_archived=False)
     if _mark_received(doc, request.user):
-        if doc.status == "pending":
+        if doc.status == "pending" and doc.status_change_error("in_progress") is None:
             doc.status = "in_progress"
             doc.save(update_fields=["status", "updated_at"])
         if doc.status == "in_progress":
@@ -164,10 +164,11 @@ def receive_file(request, pk):
 @login_required
 @require_POST
 def inbox_status(request, pk):
-    doc = get_object_or_404(Document, pk=pk, assigned_to=request.user)
+    doc = get_object_or_404(Document, pk=pk, assigned_to=request.user, is_archived=False)
     status = request.POST.get("status", "")
-    if status not in dict(STATUS_CHOICES) or status == "returned":
-        messages.error(request, "Please choose a valid status. Use Return to send a file back.")
+    error = doc.status_change_error(status)
+    if error:
+        messages.error(request, error)
         return _back(request)
     _mark_received(doc, request.user)                # working on it counts as receiving it
     doc.status = status
@@ -180,14 +181,10 @@ def inbox_status(request, pk):
 @require_POST
 def review_file(request, pk):
     doc = get_object_or_404(Document, pk=pk, assigned_to=request.user, is_archived=False)
-    incoming = Transfer.objects.filter(
-        document=doc, recipient=request.user, recalled=False,
-    ).first()
     review_status = request.POST.get("review_status", "")
-    if not incoming or not incoming.received_at:
-        messages.error(request, "Receive the file before reviewing it.")
-    elif review_status not in dict(REVIEW_STATUS_CHOICES):
-        messages.error(request, "Choose Approved, Rejected, or Checked.")
+    error = doc.review_error(request.user, review_status)
+    if error:
+        messages.error(request, error)
     else:
         doc.review_status = review_status
         doc.reviewed_by = request.user
@@ -202,11 +199,11 @@ def review_file(request, pk):
 def forward_file(request, pk):
     """Forward a file you hold to someone else, or (with return=1) send it back to who sent it to you."""
     me = request.user
-    doc = get_object_or_404(Document, pk=pk, assigned_to=me)
+    doc = get_object_or_404(Document, pk=pk, assigned_to=me, is_archived=False)
     remark = _remark(request)
 
     if request.POST.get("return"):
-        last = doc.transfers.filter(recipient=me, recalled=False).select_related("sender").first()
+        last = doc.latest_incoming(me)
         target = last.sender if last and last.sender and last.sender.is_active else None
         kind, status = "return", "returned"
         if target is None:
@@ -218,8 +215,9 @@ def forward_file(request, pk):
         if target is None:
             messages.error(request, "Please choose who to send this file to.")
             return _back(request)
-        if doc.status == "completed":
-            messages.error(request, "Completed files can't be forwarded.")
+        error = doc.send_error()
+        if error:
+            messages.error(request, error)
             return _back(request)
 
     _mark_received(doc, me)
@@ -262,13 +260,13 @@ def sent(request):
     paginator = Paginator(qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    status_labels = dict(STATUS_CHOICES)
+    attach_labels([t.document for t in page_obj], status=True)
     for t in page_obj:
         d = t.document
         t.recipient_name = display_name(t.recipient)
         t.recipient_initial = (t.recipient_name[:1] or "?").upper()
-        t.doc_status_label = status_labels.get(d.status, d.status.title())
-        t.can_recall = (not t.recalled and t.received_at is None and d.assigned_to_id == t.recipient_id)
+        t.doc_status_label = d.status_label
+        t.can_recall = t.recall_error() is None
         t.holder_name = display_name(d.assigned_to) if d.assigned_to_id and d.assigned_to_id != t.recipient_id else ""
 
     return render(request, "pages/sent.html", {
@@ -297,8 +295,8 @@ def send_file(request):
 
     if doc is None:
         messages.error(request, "Choose one of your own files to send.")
-    elif doc.status == "completed":
-        messages.error(request, "Completed files can't be sent.")
+    elif doc.send_error():
+        messages.error(request, doc.send_error())
     elif target is None:
         messages.error(request, "Please choose who to send the file to.")
     else:
@@ -313,22 +311,19 @@ def send_file(request):
 @require_POST
 def recall_transfer(request, pk):
     """Take back a file the other person hasn't received yet."""
-    t = get_object_or_404(
-        Transfer.objects.select_related("document"),
-        pk=pk, sender=request.user, recalled=False, received_at__isnull=True,
-    )
-    doc = t.document
-    if doc.assigned_to_id != t.recipient_id:
-        messages.error(request, "This file has already moved on and can't be recalled.")
+    t = get_object_or_404(Transfer.objects.select_related("document"), pk=pk, sender=request.user)
+    error = t.recall_error()
+    if error:
+        messages.error(request, error)
         return redirect("sent")
 
+    doc = t.document
     held_before = doc.transfers.filter(recipient=request.user, recalled=False, received_at__isnull=False).exists()
     with transaction.atomic():
         t.recalled = True
         t.save(update_fields=["recalled"])
         doc.assigned_to = request.user if held_before else None
-        if t.prev_status:
-            doc.status = t.prev_status
+        doc.status = t.prev_status or "pending"
         doc.save(update_fields=["assigned_to", "status", "updated_at"])
     messages.success(request, f"{doc.reference_no} was recalled.")
     return redirect("sent")
