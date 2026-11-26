@@ -51,9 +51,16 @@ a.dk-btn { display: inline-block; text-decoration: none; }
 .ho-meta { display: flex; flex-wrap: wrap; gap: .3rem .9rem; font-size: .73rem; color: var(--dk-muted); }
 .ho-meta i { margin-right: .25rem; color: var(--dk-primary); }
 .ho-meta .late { color: var(--dk-danger); font-weight: 700; }
+.ho-attachment-row { display: flex; }
+.ho-card .ho-attachment { display: inline-flex; align-items: center; gap: .5rem; padding: .3rem .5rem; border: 0; border-radius: .6rem; background-image: var(--dk-gradient); color: #fff; font-size: .76rem; font-weight: 700; letter-spacing: .02em; text-decoration: none; box-shadow: 0 3px 9px rgba(13, 148, 136, .22); transition: transform .12s, box-shadow .12s; }
+.ho-card .ho-attachment:hover, .ho-card .ho-attachment:focus-visible { color: #fff; transform: translateY(-1px); box-shadow: 0 5px 12px rgba(13, 148, 136, .3); }
+.ho-card .ho-attachment i { color: #fff; }
+.ho-card .ho-attachment .ho-attachment-arrow { margin-left: .15rem; font-size: .75rem; }
 .ho-state { font-size: .76rem; font-weight: 600; }
 .ho-state.waiting { color: #b45309; }
 .ho-state.received { color: var(--dk-primary-dark); }
+.ho-received-time { display: inline-flex; align-items: center; gap: .2rem; padding: .42rem .7rem; border: 1px solid #99f6e4; border-radius: .6rem; background: #ecfdf5; font-size: .82rem; font-weight: 800; }
+.ho-received-date { font-size: .74rem; font-weight: 600; }
 .ho-state.recalled { color: var(--dk-muted); }
 .ho-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin-top: auto; padding-top: .7rem; border-top: 1px solid #edf0f3; }
 .ho-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; }

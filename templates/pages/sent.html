@@ -5,7 +5,7 @@
 
 {% block extra_css %}
 <link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
-<link href="{% static 'assets/css/handoff.css' %}" rel="stylesheet" />
+<link href="{% static 'assets/css/handoff.css' %}?v=2" rel="stylesheet" />
 {% endblock extra_css %}
 
 {% block content %}
@@ -66,12 +66,13 @@
         <span>Sent to <b>{{ t.recipient_name }}</b> &middot; {{ t.sent_at|timesince }} ago</span>
       </div>
       {% if t.remark %}<p class="ho-quote">{{ t.remark }}</p>{% endif %}
+      {% if t.document.attachment %}<div class="ho-attachment-row"><a class="ho-attachment" href="{{ t.document.attachment.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i><span>Open attached file</span><i class="fas fa-arrow-up-right-from-square ho-attachment-arrow"></i></a></div>{% endif %}
 
       <div>
         {% if t.recalled %}
           <span class="ho-state recalled"><i class="fas fa-ban me-1"></i>You recalled this file</span>
         {% elif t.received_at %}
-          <span class="ho-state received"><i class="fas fa-check-double me-1"></i>Received {{ t.received_at|timesince }} ago</span>
+          <span class="ho-state received ho-received-time" title="Received {{ t.received_at|date:'M j, Y g:i A' }}"><i class="fas fa-check-double me-1"></i>Received at {{ t.received_at|date:"g:i A" }} <span class="ho-received-date">&middot; {{ t.received_at|date:"M j, Y" }}</span></span>
         {% else %}
           <span class="ho-state waiting"><i class="far fa-clock me-1"></i>Waiting for {{ t.recipient_name }} to receive it</span>
         {% endif %}
