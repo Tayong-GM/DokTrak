@@ -5,7 +5,7 @@
 
 {% block extra_css %}
 <link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
-<link href="{% static 'assets/css/handoff.css' %}?v=2" rel="stylesheet" />
+<link href="{% static 'assets/css/handoff.css' %}?v=4" rel="stylesheet" />
 {% endblock extra_css %}
 
 {% block content %}
@@ -55,6 +55,8 @@
         <span class="ho-ref">{{ t.document.reference_no }}</span>
         <div class="ho-badges">
           {% if t.kind == 'return' %}<span class="ho-badge return">Returned</span>{% elif t.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
+          {% if t.is_urgent_deadline %}<span class="ho-badge p-urgent">Urgent</span>{% endif %}
+          {% if t.document.status == 'completed' %}<span class="ho-badge deadline">Completed · {% if t.document.completed_at %}{{ t.document.completed_at|date:"M d, Y g:i A" }} PHT{% else %}time unavailable{% endif %}</span>{% elif t.deadline_label %}<span class="ho-badge deadline">{{ t.document.due_date|date:"M d, Y" }}{% if t.document.due_time %} {{ t.document.due_time|time:"g:i A" }} PHT{% endif %} · {{ t.deadline_label }}</span>{% endif %}
           <span class="ho-st s-{{ t.document.status }}">{{ t.doc_status_label }}</span>
         </div>
       </div>
@@ -66,7 +68,7 @@
         <span>Sent to <b>{{ t.recipient_name }}</b> &middot; {{ t.sent_at|timesince }} ago</span>
       </div>
       {% if t.remark %}<p class="ho-quote">{{ t.remark }}</p>{% endif %}
-      {% if t.document.attachment %}<div class="ho-attachment-row"><a class="ho-attachment" href="{{ t.document.attachment.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i><span>Open attached file</span><i class="fas fa-arrow-up-right-from-square ho-attachment-arrow"></i></a></div>{% endif %}
+      {% if t.document.attachment %}<div class="ho-attachment-row"><a class="ho-attachment" href="{{ t.document.attachment.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i><span>Open attached file</span><i class="fas fa-arrow-up-right-from-square ho-attachment-arrow"></i></a><a class="ho-attachment" href="{{ t.document.attachment.url }}" download="{{ t.document.attachment_name }}"><i class="fas fa-download"></i><span>Download file</span></a></div>{% endif %}
 
       <div>
         {% if t.recalled %}

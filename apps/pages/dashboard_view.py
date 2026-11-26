@@ -1,9 +1,10 @@
 from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import render
 from django.utils import timezone
+from django.utils.dateformat import format as date_format
 
 from .document_model import STATUS_CHOICES, Document, Transfer
 from .recent_files_view import attach_labels
@@ -18,6 +19,8 @@ def _due_note(d, today):
     if n < 0:
         return f"Overdue by {-n} day{'s' if n != -1 else ''}", "late"
     if n == 0:
+        if d.due_time and d.due_time < timezone.localtime().time():
+            return f"Overdue since {date_format(d.due_time, 'g:i A')}", "late"
         return "Due today", "soon"
     return f"Due in {n} day{'s' if n != 1 else ''}", "soon"
 
@@ -30,7 +33,8 @@ def dashboard(request):
     # ---- counts ----
     counts = dict(docs.values_list("status").annotate(n=Count("id")).order_by())
     total = sum(counts.values())
-    overdue = docs.filter(due_date__lt=today).exclude(status="completed").count()
+    overdue_filter = Q(due_date__lt=today) | Q(due_date=today, due_time__lt=timezone.localtime().time())
+    overdue = docs.filter(overdue_filter).exclude(status="completed").count()
     completed = counts.get("completed", 0)
     returned_to_user = docs.filter(
         assigned_to=request.user, status="returned",

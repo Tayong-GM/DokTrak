@@ -47,7 +47,7 @@
             <div class="scan-detail"><span>Type</span><strong>{{ match.doc_type|default:"Not specified" }}</strong></div>
             <div class="scan-detail"><span>Priority</span><strong>{{ match.get_priority_display|default:match.priority|title }}</strong></div>
             <div class="scan-detail"><span>Status</span><strong>{{ match.get_status_display|default:match.status|title }}</strong></div>
-            <div class="scan-detail"><span>Due date</span><strong>{{ match.due_date|date:"M d, Y"|default:"No due date" }}</strong></div>
+            {% if match.status == 'completed' %}<div class="scan-detail"><span>Completed at</span><strong>{% if match.completed_at %}{{ match.completed_at|date:"M d, Y g:i A" }} PHT{% else %}Time unavailable{% endif %}</strong></div>{% else %}<div class="scan-detail"><span>Due date</span><strong>{{ match.due_date|date:"M d, Y"|default:"No due date" }}{% if match.due_time %} at {{ match.due_time|time:"g:i A" }} PHT{% endif %}</strong></div>{% endif %}
             <div class="scan-detail"><span>Confidential</span><strong>{% if match.confidential %}Yes{% else %}No{% endif %}</strong></div>
             {% if match.description %}<div class="scan-detail"><span>Description</span><strong>{{ match.description }}</strong></div>{% endif %}
           </div>

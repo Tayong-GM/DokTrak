@@ -1,6 +1,6 @@
 import copy
 import uuid
-from datetime import date
+from datetime import date, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
 from django.shortcuts import redirect, render
+from django.utils import timezone
 
 from .create_file_config import PAGE, SECTIONS
 from .document_model import Document, Transfer
@@ -22,7 +23,7 @@ from .models import DepartmentProfile
 # Return the reference number to show in the success message.
 # ---------------------------------------------------------------------------
 def save_document(data, files, request, recipient):
-    ref = f"{PAGE['reference_prefix']}-{date.today():%Y}-{uuid.uuid4().hex[:6].upper()}"
+    ref = f"{PAGE['reference_prefix']}-{timezone.localdate():%Y}-{uuid.uuid4().hex[:6].upper()}"
     model_fields = {f.name for f in Document._meta.fields}
     values = {k: v for k, v in data.items() if k in model_fields}
     values["from_office"] = (request.user.get_full_name().strip() or request.user.get_username())[:100]
@@ -87,9 +88,15 @@ def _clean_value(f, raw):
             d = date.fromisoformat(raw)
         except ValueError:
             return raw, "Enter a valid date."
-        if f.get("not_past") and d < date.today():
+        if f.get("not_past") and d < timezone.localdate():
             return raw, "Date cannot be in the past."
         return d, None
+
+    if t == "time":
+        try:
+            return time.fromisoformat(raw), None
+        except ValueError:
+            return raw, "Enter a valid time."
 
     if t in ("select", "radio"):
         if raw not in {v for v, _ in f["options"]}:
@@ -130,7 +137,7 @@ def build_form_fields(sections, *, not_past=None, overrides=None):
         f["error"] = None
         if f["type"] == "date" and f.get("not_past"):
             if not_past is True:
-                f["min"] = date.today().isoformat()
+                f["min"] = timezone.localdate().isoformat()
             elif not_past is False:
                 f.pop("not_past")
         f.update(overrides.get(f["name"], {}))
@@ -186,6 +193,10 @@ def create_file(request):
     duplicate_warning = False
 
     if request.method == "POST":
+        custom_due_date = request.POST.get("priority") == "custom"
+        due_date_field = next((f for f in fields if f["name"] == "due_date"), None)
+        if due_date_field:
+            due_date_field["required"] = custom_due_date
         data, files = {}, {}
         for f in fields:
             name = f["name"]
@@ -199,6 +210,16 @@ def create_file(request):
                 f["value"] = raw or ""
                 f["checked"] = raw in ("on", "true", "1")
             has_errors = has_errors or bool(f["error"])
+
+        if not has_errors:
+            deadline_days = {
+                "two_weeks": 14,
+                "one_week": 7,
+                "three_days": 3,
+                "one_day": 1,
+            }
+            if data.get("priority") in deadline_days:
+                data["due_date"] = timezone.localdate() + timedelta(days=deadline_days[data["priority"]])
 
         if not has_errors:
             destination = data.get("to_office", "").strip()
@@ -219,7 +240,7 @@ def create_file(request):
         for f in fields:
             default = f.get("default", "")
             if default == "today":
-                default = date.today().isoformat()
+                default = timezone.localdate().isoformat()
             if f["name"] == "from_office":
                 default = sender_name[:100]
             f["value"] = default

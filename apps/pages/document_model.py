@@ -22,7 +22,7 @@ ALLOWED_STATUS_TRANSITIONS = {
     "pending": {"in_progress", "completed"},
     "in_progress": {"pending", "completed"},
     "completed": {"in_progress"},          # reopen; remove this line to make completed final
-    "returned": {"in_progress"},
+    "returned": {"in_progress", "completed"},
 }
 
 
@@ -40,10 +40,12 @@ class Document(models.Model):
     to_office = models.CharField(max_length=100, blank=True)
     priority = models.CharField(max_length=20, default="normal")
     due_date = models.DateField(null=True, blank=True)
+    due_time = models.TimeField(null=True, blank=True)
     confidential = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     archived_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, default="pending")
+    completed_at = models.DateTimeField(null=True, blank=True)
     review_status = models.CharField(max_length=20, blank=True, choices=REVIEW_STATUS_CHOICES)
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
@@ -77,7 +79,12 @@ class Document(models.Model):
 
     @property
     def is_overdue(self):
-        return bool(self.due_date and self.due_date < timezone.localdate() and self.status != "completed")
+        if not self.due_date or self.status == "completed":
+            return False
+        today = timezone.localdate()
+        if self.due_date < today:
+            return True
+        return bool(self.due_date == today and self.due_time and self.due_time < timezone.localtime().time())
 
     @property
     def attachment_name(self):

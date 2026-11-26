@@ -173,7 +173,7 @@
         <div class="rf-meta mt-2">
           {% if f.type_label %}<span><i class="fas fa-tag"></i>{{ f.type_label }}</span>{% endif %}
           {% if f.from_office or f.to_office %}<span><i class="fas fa-route"></i>{{ f.from_office|default:"?" }} &rarr; {{ f.to_office|default:"?" }}</span>{% endif %}
-          {% if f.due_date %}<span class="{% if f.is_overdue %}late{% endif %}"><i class="far fa-calendar-alt"></i>{% if f.is_overdue %}Overdue &middot; {% else %}Due {% endif %}{{ f.due_date|date:"M d, Y" }}</span>{% endif %}
+          {% if f.status == 'completed' %}<span><i class="fas fa-check-circle"></i>Completed {% if f.completed_at %}{{ f.completed_at|date:"M d, Y g:i A" }} PHT{% else %}time unavailable{% endif %}</span>{% elif f.due_date %}<span class="{% if f.is_overdue %}late{% endif %}"><i class="far fa-calendar-alt"></i>{% if f.is_overdue %}Overdue &middot; {% else %}Due {% endif %}{{ f.due_date|date:"M d, Y" }}{% if f.due_time %} at {{ f.due_time|time:"g:i A" }} PHT{% endif %}</span>{% endif %}
           <span title="{{ f.created_at }}"><i class="far fa-clock"></i>{{ f.created_at|timesince }} ago</span>
         </div>
       </div>

@@ -5,7 +5,7 @@
 
 {% block extra_css %}
 <link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
-<link href="{% static 'assets/css/handoff.css' %}?v=2" rel="stylesheet" />
+<link href="{% static 'assets/css/handoff.css' %}?v=4" rel="stylesheet" />
 {% endblock extra_css %}
 
 {% block content %}
@@ -59,7 +59,8 @@
         <div class="ho-badges">
           {% if f.is_new %}<span class="ho-badge new">New</span>{% endif %}
           {% if f.incoming.kind == 'return' %}<span class="ho-badge return">Returned to you</span>{% elif f.incoming.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
-          <span class="ho-badge p-{{ f.priority }}">{{ f.priority_label }}</span>
+          {% if f.is_urgent_deadline %}<span class="ho-badge p-urgent">Urgent</span>{% endif %}
+          {% if f.status == 'completed' %}<span class="ho-badge deadline">Completed · {% if f.completed_at %}{{ f.completed_at|date:"M d, Y g:i A" }} PHT{% else %}time unavailable{% endif %}</span>{% elif f.deadline_label %}<span class="ho-badge deadline">{{ f.due_date|date:"M d, Y" }}{% if f.due_time %} {{ f.due_time|time:"g:i A" }} PHT{% endif %} · {{ f.deadline_label }}</span>{% endif %}
       {% if f.review_status %}<span class="ho-badge review-{{ f.review_status }}">{{ f.get_review_status_display }}</span>{% endif %}
         </div>
       </div>
@@ -83,10 +84,7 @@
 
       {% if f.review_status %}<p class="ho-review-info">Updated by <b>{{ f.reviewed_by_name }}</b> · {{ f.reviewed_at|date:"M d, Y g:i A" }}</p>{% endif %}
 
-      <div class="ho-meta">
-        {% if f.due_date %}<span class="{% if f.is_overdue %}late{% endif %}"><i class="far fa-calendar-alt"></i>{% if f.is_overdue %}Overdue &middot; {% else %}Due {% endif %}{{ f.due_date|date:"M d, Y" }}</span>{% endif %}
-      </div>
-      {% if f.attachment %}<div class="ho-attachment-row"><a class="ho-attachment" href="{{ f.attachment.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i><span>Open attached file</span><i class="fas fa-arrow-up-right-from-square ho-attachment-arrow"></i></a></div>{% endif %}
+      {% if f.attachment %}<div class="ho-attachment-row"><a class="ho-attachment" href="{{ f.attachment.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i><span>Open attached file</span><i class="fas fa-arrow-up-right-from-square ho-attachment-arrow"></i></a><a class="ho-attachment" href="{{ f.attachment.url }}" download="{{ f.attachment_name }}"><i class="fas fa-download"></i><span>Download file</span></a></div>{% endif %}
 
       <div class="ho-foot">
         {% if f.is_new %}

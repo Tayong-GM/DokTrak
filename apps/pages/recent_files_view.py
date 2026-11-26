@@ -113,7 +113,8 @@ def recent_files(request):
             matches |= Q(confidential=False)
         qs = qs.filter(matches)
     if status == "overdue":
-        qs = qs.filter(due_date__lt=today).exclude(status="completed")
+        overdue = Q(due_date__lt=today) | Q(due_date=today, due_time__lt=timezone.localtime().time())
+        qs = qs.filter(overdue).exclude(status="completed")
     elif status:
         qs = qs.filter(status=status)
     if dtype:
@@ -127,7 +128,9 @@ def recent_files(request):
     counts = dict(all_docs.values_list("status").annotate(n=Count("id")).order_by())
     stats = {
         "total": sum(counts.values()),
-        "overdue": all_docs.filter(due_date__lt=today).exclude(status="completed").count(),
+        "overdue": all_docs.filter(
+            Q(due_date__lt=today) | Q(due_date=today, due_time__lt=timezone.localtime().time())
+        ).exclude(status="completed").count(),
     }
     for value, _ in STATUS_CHOICES:
         stats[value] = counts.get(value, 0)

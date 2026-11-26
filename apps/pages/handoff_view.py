@@ -5,6 +5,8 @@ models (Document.status_change_error, review_error, send_error and
 Transfer.recall_error in document_model.py). The views only look the objects up,
 ask the model, and show its message.
 """
+from datetime import datetime, time
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
@@ -15,7 +17,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
-
 from .document_model import REVIEW_STATUS_CHOICES, STATUS_CHOICES, Document, Transfer
 from .recent_files_view import _pager_context, attach_labels
 
@@ -49,6 +50,39 @@ def _recipient(request):
 
 def _remark(request):
     return request.POST.get("remark", "").strip()[:300]
+
+
+def _deadline_label(document):
+    """Return a live due countdown, including elapsed days after the deadline."""
+    if not document.due_date or document.status == "completed":
+        return ""
+    due_time = document.due_time or time.max
+    deadline = timezone.make_aware(
+        datetime.combine(document.due_date, due_time),
+        timezone.get_current_timezone(),
+    )
+    seconds = (deadline - timezone.localtime()).total_seconds()
+    today = timezone.localdate()
+    if seconds > 0:
+        days = (document.due_date - today).days
+        if days <= 0:
+            return "Due today"
+        return f"Due in {days} day{'s' if days != 1 else ''}"
+    days = max(1, (today - document.due_date).days)
+    return f"Overdue by {days} day{'s' if days != 1 else ''}"
+
+
+def _is_urgent_deadline(document):
+    """Show an Urgent badge only while the deadline is within the next 24 hours."""
+    if not document.due_date or document.status == "completed":
+        return False
+    due_time = document.due_time or time.max
+    deadline = timezone.make_aware(
+        datetime.combine(document.due_date, due_time),
+        timezone.get_current_timezone(),
+    )
+    remaining = (deadline - timezone.localtime()).total_seconds()
+    return 0 < remaining <= 86400
 
 
 def _back(request, default="inbox"):
@@ -130,6 +164,8 @@ def inbox(request):
         d.is_new = bool(t and t.received_at is None)
         d.sender_name = display_name(t.sender) if t else ""
         d.sender_initial = (d.sender_name[:1] or "?").upper()
+        d.deadline_label = _deadline_label(d)
+        d.is_urgent_deadline = _is_urgent_deadline(d)
         d.reviewed_by_name = display_name(d.reviewed_by)
 
     return render(request, "pages/inbox.html", {
@@ -171,8 +207,15 @@ def inbox_status(request, pk):
         messages.error(request, error)
         return _back(request)
     _mark_received(doc, request.user)                # working on it counts as receiving it
+    update_fields = ["status", "updated_at"]
+    if status == "completed" and doc.status != "completed":
+        doc.completed_at = timezone.now()
+        update_fields.append("completed_at")
+    elif status != "completed" and doc.status == "completed":
+        doc.completed_at = None
+        update_fields.append("completed_at")
     doc.status = status
-    doc.save(update_fields=["status", "updated_at"])
+    doc.save(update_fields=update_fields)
     messages.success(request, f"{doc.reference_no} is now {dict(STATUS_CHOICES)[status]}.")
     return _back(request)
 
@@ -260,12 +303,15 @@ def sent(request):
     paginator = Paginator(qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    attach_labels([t.document for t in page_obj], status=True)
+    attach_labels([t.document for t in page_obj], status=True, priority=True)
     for t in page_obj:
         d = t.document
         t.recipient_name = display_name(t.recipient)
         t.recipient_initial = (t.recipient_name[:1] or "?").upper()
         t.doc_status_label = d.status_label
+        t.priority_label = d.priority_label
+        t.deadline_label = _deadline_label(d)
+        t.is_urgent_deadline = _is_urgent_deadline(d)
         t.can_recall = t.recall_error() is None
         t.holder_name = display_name(d.assigned_to) if d.assigned_to_id and d.assigned_to_id != t.recipient_id else ""
 

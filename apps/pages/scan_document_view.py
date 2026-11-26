@@ -1,8 +1,8 @@
 import logging
-from datetime import date
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
+from django.utils import timezone
 
 from .create_file_view import _clean_file, _clean_value, build_form_fields
 from .document_matching import UNREADABLE_FILE_ERRORS, OCRUnavailable, extract_text, find_document_match
@@ -53,7 +53,7 @@ def scan_document(request):
         for f in fields:
             default = f.get("default", "")
             if default == "today":
-                default = date.today().isoformat()
+                default = timezone.localdate().isoformat()
             f["value"] = default
             f["checked"] = bool(default)
 

@@ -144,7 +144,7 @@
                 <span class="db-dot {{ f.due_class }}"></span>
                 <span class="db-item-main">
                   <span class="db-item-title">{{ f.title }}</span>
-                  <span class="db-item-sub {{ f.due_class }}">{{ f.due_note }}</span>
+                  <span class="db-item-sub {{ f.due_class }}">{{ f.due_note }}{% if f.due_time %} · {{ f.due_time|time:"g:i A" }} PHT{% endif %}</span>
                   <span class="db-item-sub">{{ f.reference_no }}{% if f.to_office %} &middot; to {{ f.to_office }}{% endif %}</span>
                 </span>
                 <span class="db-st s-{{ f.status }}">{{ f.status_label }}</span>
