@@ -5,7 +5,7 @@
 
 {% block extra_css %}
 <link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
-<link href="{% static 'assets/css/handoff.css' %}?v=4" rel="stylesheet" />
+<link href="{% static 'assets/css/handoff.css' %}?v=5" rel="stylesheet" />
 {% endblock extra_css %}
 
 {% block content %}
@@ -14,7 +14,7 @@
   <div class="dk-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
     <div>
       <h5 class="text-white mb-1">Inbox</h5>
-      <p class="text-white opacity-8 text-sm mb-0">Files other people sent to you to handle.{% if stats.new %} <b>{{ stats.new }} waiting to be received.</b>{% endif %}</p>
+      <p class="text-white opacity-8 text-sm mb-0">Files other people sent to you to handle.{% if stats.new %} <b>{{ stats.new }} waiting to be received.</b>{% endif %}{% if stats.recall_pending %} <b>{{ stats.recall_pending }} recall request{{ stats.recall_pending|pluralize }} awaiting your response.</b>{% endif %}</p>
     </div>
     <a href="{% url 'sent' %}" class="dk-btn dk-btn-ghost dk-btn-sm" style="position:relative;z-index:1;"><i class="fas fa-paper-plane me-1"></i> Files I sent</a>
   </div>
@@ -75,6 +75,15 @@
         <span class="ho-avatar">{{ f.sender_initial }}</span>
         <span>From <b>{{ f.sender_name }}</b> &middot; {{ f.incoming.sent_at|timesince }} ago</span>
       </div>
+      {% if f.recall_pending %}
+      <div class="ho-recall-request">
+        <div><strong>{{ f.sender_name }} asked to recall this file.</strong><span>Approve to return it to the sender, or decline to keep it with you.</span></div>
+        <div class="ho-actions">
+          <form method="post" action="{% url 'respond_recall' f.incoming.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="decision" value="approve"><button type="submit" class="dk-btn dk-btn-sm"><i class="fas fa-check me-1"></i> Approve recall</button></form>
+          <form method="post" action="{% url 'respond_recall' f.incoming.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="decision" value="decline"><button type="submit" class="ho-icon warn"><i class="fas fa-times me-1"></i> Decline</button></form>
+        </div>
+      </div>
+      {% endif %}
       {% if f.incoming.remark %}<p class="ho-quote">{{ f.incoming.remark }}</p>{% endif %}
       {% endif %}
 
@@ -108,14 +117,14 @@
             </select>
           </form>
         {% endif %}
-        <div class="ho-actions">
+        {% if not f.recall_pending %}<div class="ho-actions">
           <button type="button" class="ho-icon" data-bs-toggle="modal" data-bs-target="#handoffModal" data-mode="forward"
                   data-action="{% url 'forward_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}"><i class="fas fa-share"></i> Forward</button>
           {% if f.incoming and not f.is_new %}
           <button type="button" class="ho-icon warn" data-bs-toggle="modal" data-bs-target="#handoffModal" data-mode="return"
                   data-action="{% url 'forward_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}" data-to="{{ f.sender_name }}"><i class="fas fa-undo"></i> Return</button>
           {% endif %}
-        </div>
+        </div>{% endif %}
       </div>
     </div>
     {% endfor %}

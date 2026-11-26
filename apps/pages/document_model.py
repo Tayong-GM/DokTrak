@@ -133,6 +133,9 @@ class Transfer(models.Model):
     sent_at = models.DateTimeField(auto_now_add=True)
     received_at = models.DateTimeField(null=True, blank=True)
     recalled = models.BooleanField(default=False)
+    recall_requested_at = models.DateTimeField(null=True, blank=True)
+    recall_decided_at = models.DateTimeField(null=True, blank=True)
+    recall_approved = models.BooleanField(null=True, blank=True)
 
     class Meta:
         ordering = ["-sent_at"]
@@ -152,8 +155,11 @@ class Transfer(models.Model):
     def recall_error(self):
         if self.recalled:
             return "This file was already recalled."
-        if self.received_at is not None:
-            return "This file has already been received and can't be recalled."
+        if self.recall_requested_at and self.recall_decided_at is None:
+            return "A recall request is already waiting for the recipient."
         if self.document.assigned_to_id != self.recipient_id:
+            return "This file has already moved on and can't be recalled."
+        latest = self.document.transfers.filter(recipient_id=self.recipient_id, recalled=False).first()
+        if not latest or latest.pk != self.pk:
             return "This file has already moved on and can't be recalled."
         return None

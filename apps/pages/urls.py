@@ -6,7 +6,7 @@ from .scan_document_view import scan_document as scan_document_page
 from .recent_files_view import recent_files as recent_files_page, archived_files as archived_files_page, archive_file, edit_file, delete_file
 from .dashboard_view import dashboard as dashboard_page
 from .handoff_view import (inbox, sent, send_file, receive_file,
-                           forward_file, inbox_status, review_file, recall_transfer)
+                           forward_file, inbox_status, review_file, recall_transfer, respond_recall)
 
 urlpatterns = [
     path('', dashboard_page, name='index'),
@@ -28,5 +28,6 @@ urlpatterns = [
     path('handoff/<int:pk>/status/', inbox_status, name='inbox_status'),
     path('handoff/<int:pk>/review/', review_file, name='review_file'),
     path('handoff/<int:pk>/recall/', recall_transfer, name='recall_transfer'),
+    path('handoff/<int:pk>/recall-response/', respond_recall, name='respond_recall'),
     
 ]

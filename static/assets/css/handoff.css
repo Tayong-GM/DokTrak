@@ -46,6 +46,10 @@ a.dk-btn { display: inline-block; text-decoration: none; }
 .ho-avatar { width: 2rem; height: 2rem; flex: 0 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center;
              font-size: .8rem; font-weight: 700; color: #fff; background-image: var(--dk-gradient); }
 .ho-quote { margin: 0; padding: .55rem .8rem; font-size: .78rem; color: var(--dk-text); background: #f6f8fa; border-left: 3px solid var(--dk-primary-light); border-radius: .4rem; }
+.ho-recall-request { display: grid; gap: .7rem; padding: .85rem; border: 1px solid #fcd34d; border-left: 4px solid #f59e0b; border-radius: .7rem; background: #fffbeb; }
+.ho-recall-request strong { display: block; color: #92400e; font-size: .82rem; }
+.ho-recall-request span { display: block; margin-top: .15rem; color: #78350f; font-size: .76rem; }
+.ho-recall-request form { margin: 0; }
 .ho-review-info { margin: 0; color: var(--dk-muted); font-size: .74rem; }
 .ho-review-info b { color: var(--dk-text); }
 .ho-review-form { min-width: 125px; }

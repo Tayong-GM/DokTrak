@@ -133,6 +133,10 @@ def inbox(request):
     stats = {
         "total": sum(counts.values()),
         "new": mine.filter(is_new).count(),
+        "recall_pending": Transfer.objects.filter(
+            recipient=me, recalled=False, recall_requested_at__isnull=False,
+            recall_decided_at__isnull=True, document__assigned_to=me,
+        ).count(),
         "in_progress": counts.get("in_progress", 0),
         "completed": counts.get("completed", 0),
         "returned": counts.get("returned", 0),
@@ -166,6 +170,7 @@ def inbox(request):
         d.sender_initial = (d.sender_name[:1] or "?").upper()
         d.deadline_label = _deadline_label(d)
         d.is_urgent_deadline = _is_urgent_deadline(d)
+        d.recall_pending = bool(t and t.recall_requested_at and t.recall_decided_at is None)
         d.reviewed_by_name = display_name(d.reviewed_by)
 
     return render(request, "pages/inbox.html", {
@@ -243,6 +248,10 @@ def forward_file(request, pk):
     """Forward a file you hold to someone else, or (with return=1) send it back to who sent it to you."""
     me = request.user
     doc = get_object_or_404(Document, pk=pk, assigned_to=me, is_archived=False)
+    incoming = doc.latest_incoming(me)
+    if incoming and incoming.recall_requested_at and incoming.recall_decided_at is None:
+        messages.error(request, "Respond to the pending recall request before forwarding or returning this file.")
+        return _back(request)
     remark = _remark(request)
 
     if request.POST.get("return"):
@@ -285,6 +294,9 @@ def sent(request):
         "waiting": base.filter(received_at__isnull=True, recalled=False).count(),
         "received": base.filter(received_at__isnull=False, recalled=False).count(),
         "recalled": base.filter(recalled=True).count(),
+        "recall_pending": base.filter(
+            recalled=False, recall_requested_at__isnull=False, recall_decided_at__isnull=True,
+        ).count(),
     }
 
     qs = base.select_related("document", "document__assigned_to", "recipient")
@@ -294,6 +306,8 @@ def sent(request):
         qs = qs.filter(received_at__isnull=False, recalled=False)
     elif state == "recalled":
         qs = qs.filter(recalled=True)
+    elif state == "recall_requests":
+        qs = qs.filter(recalled=False, recall_requested_at__isnull=False, recall_decided_at__isnull=True)
     if q:
         qs = qs.filter(
             Q(document__title__icontains=q) | Q(document__reference_no__icontains=q)
@@ -312,7 +326,13 @@ def sent(request):
         t.priority_label = d.priority_label
         t.deadline_label = _deadline_label(d)
         t.is_urgent_deadline = _is_urgent_deadline(d)
+        t.recall_pending = bool(t.recall_requested_at and t.recall_decided_at is None)
+        t.recall_denied = bool(t.recall_decided_at and t.recall_approved is False)
         t.can_recall = t.recall_error() is None
+        t.can_edit_resend = bool(
+            t.recalled and d.status != "completed"
+            and (d.assigned_to_id == me.pk or (d.assigned_to_id is None and d.created_by_id == me.pk))
+        )
         t.holder_name = display_name(d.assigned_to) if d.assigned_to_id and d.assigned_to_id != t.recipient_id else ""
 
     return render(request, "pages/sent.html", {
@@ -356,20 +376,64 @@ def send_file(request):
 @login_required
 @require_POST
 def recall_transfer(request, pk):
-    """Take back a file the other person hasn't received yet."""
+    """Ask the current recipient for permission to recall a file."""
     t = get_object_or_404(Transfer.objects.select_related("document"), pk=pk, sender=request.user)
     error = t.recall_error()
     if error:
         messages.error(request, error)
         return redirect("sent")
-
-    doc = t.document
-    held_before = doc.transfers.filter(recipient=request.user, recalled=False, received_at__isnull=False).exists()
-    with transaction.atomic():
-        t.recalled = True
-        t.save(update_fields=["recalled"])
-        doc.assigned_to = request.user if held_before else None
-        doc.status = t.prev_status or "pending"
-        doc.save(update_fields=["assigned_to", "status", "updated_at"])
-    messages.success(request, f"{doc.reference_no} was recalled.")
+    t.recall_requested_at = timezone.now()
+    t.recall_decided_at = None
+    t.recall_approved = None
+    t.save(update_fields=["recall_requested_at", "recall_decided_at", "recall_approved"])
+    messages.success(request, f"Recall permission was requested from {display_name(t.recipient)}.")
     return redirect("sent")
+
+
+@login_required
+@require_POST
+def respond_recall(request, pk):
+    """Let the current recipient approve or decline a recall request."""
+    decision = request.POST.get("decision")
+    if decision not in {"approve", "decline"}:
+        messages.error(request, "Choose whether to approve or decline the recall request.")
+        return _back(request)
+
+    with transaction.atomic():
+        t = get_object_or_404(
+            Transfer.objects.select_for_update().select_related("document"),
+            pk=pk, recipient=request.user, recalled=False,
+        )
+        if not t.recall_requested_at or t.recall_decided_at is not None:
+            messages.error(request, "This recall request is no longer waiting for a response.")
+            return _back(request)
+
+        doc = t.document
+        latest = doc.transfers.filter(recipient=request.user, recalled=False).first()
+        if doc.assigned_to_id != request.user.pk or not latest or latest.pk != t.pk:
+            messages.error(request, "This file has already moved on, so the recall request can't be answered.")
+            return _back(request)
+
+        t.recall_decided_at = timezone.now()
+        t.recall_approved = decision == "approve"
+        update_fields = ["recall_decided_at", "recall_approved"]
+        if decision == "approve":
+            held_before = doc.transfers.filter(
+                recipient=t.sender, recalled=False, received_at__isnull=False,
+            ).exists() if t.sender_id else False
+            t.recalled = True
+            update_fields.append("recalled")
+            doc.assigned_to = t.sender if held_before else None
+            doc.status = t.prev_status or "pending"
+            doc_fields = ["assigned_to", "status", "updated_at"]
+            if doc.status != "completed" and doc.completed_at:
+                doc.completed_at = None
+                doc_fields.append("completed_at")
+            doc.save(update_fields=doc_fields)
+        t.save(update_fields=update_fields)
+
+    if decision == "approve":
+        messages.success(request, f"Recall approved for {doc.reference_no}. The sender can now edit and resend it.")
+    else:
+        messages.success(request, f"Recall declined. {doc.reference_no} remains with you.")
+    return _back(request)
