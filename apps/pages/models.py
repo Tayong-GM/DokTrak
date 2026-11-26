@@ -1,16 +1,6 @@
 from django.conf import settings
 from django.db import models
-from .document_model import Document  # noqa
-# Create your models here.
-
-class Product(models.Model):
-    id    = models.AutoField(primary_key=True)
-    name  = models.CharField(max_length = 100) 
-    info  = models.CharField(max_length = 100, default = '')
-    price = models.IntegerField(blank=True, null=True)
-
-    def __str__(self):
-        return self.name
+from .document_model import Document, Transfer  # noqa: F401  (imported so Django registers these models)
 
 
 class DepartmentProfile(models.Model):
@@ -19,4 +9,3 @@ class DepartmentProfile(models.Model):
 
     def __str__(self):
         return f"{self.user} — {self.department or 'No department'}"
-

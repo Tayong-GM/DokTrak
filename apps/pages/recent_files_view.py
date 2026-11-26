@@ -2,15 +2,17 @@ import copy
 from datetime import date
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+
 from .create_file_config import PAGE as CREATE_PAGE, SECTIONS
-from .create_file_view import _clean_file, _clean_value      # same validation as Create File
+from .create_file_view import _clean_file, _clean_value, build_form_fields
 from .document_model import STATUS_CHOICES, Document
 
 PAGE_SIZE = 9
@@ -29,6 +31,19 @@ def _options(field_name):
             if f["name"] == field_name:
                 return [(str(v), label) for v, label in f.get("options", [])]
     return []
+def attach_labels(objs, *, status=False, priority=False, doc_type=False):
+    """Set status_label / priority_label / type_label on each document."""
+    maps = []
+    if status:
+        maps.append(("status", "status_label", dict(STATUS_CHOICES)))
+    if priority:
+        maps.append(("priority", "priority_label", dict(_options("priority"))))
+    if doc_type:
+        maps.append(("doc_type", "type_label", dict(_options("doc_type"))))
+    for obj in objs:
+        for field, attr, labels in maps:
+            value = getattr(obj, field)
+            setattr(obj, attr, labels.get(value, value.title()))
 
 
 def _safe_next(request, default="recent_files"):
@@ -36,11 +51,19 @@ def _safe_next(request, default="recent_files"):
     if nxt and url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
         return nxt
     return default
+def _pager_context(request, paginator, page_obj):
+    params = request.GET.copy()
+    params.pop("page", None)
+    return {
+        "page_range": paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1),
+        "qs": params.urlencode(),
+    }
 
 
 # ---------------------------------------------------------------------------
 # LIST
 # ---------------------------------------------------------------------------
+@login_required
 def recent_files(request):
     today = timezone.localdate()
     qs = Document.objects.filter(is_archived=False)
@@ -90,7 +113,8 @@ def recent_files(request):
             matches |= Q(confidential=False)
         qs = qs.filter(matches)
     if status == "overdue":
-        qs = qs.filter(due_date__lt=today).exclude(status="completed")
+        overdue = Q(due_date__lt=today) | Q(due_date=today, due_time__lt=timezone.localtime().time())
+        qs = qs.filter(overdue).exclude(status="completed")
     elif status:
         qs = qs.filter(status=status)
     if dtype:
@@ -99,43 +123,40 @@ def recent_files(request):
         qs = qs.filter(priority=priority)
     qs = qs.order_by(*SORTS[sort][1])
 
-    # summary cards (always over all files, not just the filtered ones)
+        # summary cards (always over all files, not just the filtered ones)
     all_docs = Document.objects.filter(is_archived=False)
+    counts = dict(all_docs.values_list("status").annotate(n=Count("id")).order_by())
     stats = {
-        "total": all_docs.count(),
-        "overdue": all_docs.filter(due_date__lt=today).exclude(status="completed").count(),
+        "total": sum(counts.values()),
+        "overdue": all_docs.filter(
+            Q(due_date__lt=today) | Q(due_date=today, due_time__lt=timezone.localtime().time())
+        ).exclude(status="completed").count(),
     }
     for value, _ in STATUS_CHOICES:
-        stats[value] = all_docs.filter(status=value).count()
+        stats[value] = counts.get(value, 0)
 
     paginator = Paginator(qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    type_labels, priority_labels = dict(_options("doc_type")), dict(_options("priority"))
-    status_labels = dict(STATUS_CHOICES)
-    for d in page_obj:
-        d.type_label = type_labels.get(d.doc_type, d.doc_type.title())
-        d.priority_label = priority_labels.get(d.priority, d.priority.title())
-        d.status_label = status_labels.get(d.status, d.status.title())
+    attach_labels(page_obj, status=True, priority=True, doc_type=True)
 
-    params = request.GET.copy()
-    params.pop("page", None)
+ 
 
     return render(request, "pages/recent_files.html", {
         "segment": "recent_files",
         "page_obj": page_obj,
-        "page_range": paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1),
         "result_count": paginator.count,
         "stats": stats,
         "filters": {"q": q, "status": status, "type": dtype, "priority": priority, "sort": sort},
         "has_filters": bool(q or status or dtype or priority),
-        "qs": params.urlencode(),
         "type_options": _options("doc_type"),
         "priority_options": _options("priority"),
         "sort_options": [(k, v[0]) for k, v in SORTS.items()],
+        **_pager_context(request, paginator, page_obj),
     })
 
 
+@login_required
 def archived_files(request):
     q = request.GET.get("q", "").strip()
     qs = Document.objects.filter(is_archived=True)
@@ -148,12 +169,10 @@ def archived_files(request):
         )
     paginator = Paginator(qs.order_by("-archived_at", "-created_at"), PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
-    params = request.GET.copy()
-    params.pop("page", None)
     return render(request, "pages/archived_files.html", {
         "segment": "archived_files", "page_obj": page_obj, "q": q,
-        "result_count": paginator.count, "qs": params.urlencode(),
-        "page_range": paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1),
+        "result_count": paginator.count,
+        **_pager_context(request, paginator, page_obj),
     })
 
 
@@ -163,20 +182,20 @@ def archived_files(request):
 LOCKED = {"id", "reference_no", "created_by", "created_at", "updated_at"}
 
 
+@login_required
 def edit_file(request, pk):
     doc = get_object_or_404(Document, pk=pk)
     model_fields = {f.name: f for f in Document._meta.fields}
 
-    sections = copy.deepcopy(SECTIONS)
-    fields = [f for s in sections for f in s["fields"]]
-    for f in fields:
-        f["options"] = [(str(v), label) for v, label in f.get("options", [])]
-        f["error"] = None
-        f.pop("not_past", None)                       # old files may already be past their due date
-        if f["type"] == "file":
-            f["required"] = False
-            if doc.attachment:
-                f["help"] = f"Current file: {doc.attachment_name}. Upload a new one to replace it."
+    # Per-request details live here, not patched onto the field dicts afterwards.
+    file_override = {"required": False}
+    if doc.attachment:
+        file_override["help"] = f"Current file: {doc.attachment_name}. Upload a new one to replace it."
+    overrides = {
+        f["name"]: file_override
+        for s in SECTIONS for f in s["fields"] if f["type"] == "file"
+    }
+    sections, fields = build_form_fields(SECTIONS, not_past=False, overrides=overrides)   # old files may already be past due
 
     has_errors = False
     if request.method == "POST":
@@ -227,6 +246,7 @@ def edit_file(request, pk):
 # ---------------------------------------------------------------------------
 # ARCHIVE / DELETE  (POST only)
 # ---------------------------------------------------------------------------
+@login_required
 @require_POST
 def archive_file(request, pk):
     doc = get_object_or_404(Document, pk=pk, is_archived=False)
@@ -237,6 +257,7 @@ def archive_file(request, pk):
     return redirect(_safe_next(request))
 
 
+@login_required
 @require_POST
 def delete_file(request, pk):
     doc = get_object_or_404(Document, pk=pk)

@@ -52,6 +52,10 @@
 .dk .form-check-input:checked { background-color: var(--dk-primary); border-color: var(--dk-primary); }
 .dk .form-check-input:focus { border-color: var(--dk-primary-light); box-shadow: 0 0 0 2px rgba(13, 148, 136, .22); }
 .dk .form-check-label { font-size: .85rem; color: var(--dk-text); }
+.dk-check { display: flex; align-items: center; }
+.dk-check .dk-confidential-checkbox { float: none; flex: 0 0 auto; width: 1.3rem; height: 1.3rem; margin: 0 .55rem 0 0; appearance: auto; -webkit-appearance: checkbox; accent-color: var(--dk-primary); background-image: none; cursor: pointer; }
+.dk-check .dk-confidential-checkbox:checked { background-color: transparent; background-image: none !important; border-color: var(--dk-primary); }
+.dk-check .dk-confidential-checkbox:focus-visible { outline: 2px solid rgba(13, 148, 136, .35); outline-offset: 2px; }
 
 /* ---- Segmented radio (priority etc.) ---- */
 .dk-segment { display: flex; flex-wrap: wrap; gap: .5rem; }

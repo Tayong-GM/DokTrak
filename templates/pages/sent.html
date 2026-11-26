@@ -5,7 +5,7 @@
 
 {% block extra_css %}
 <link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
-<link href="{% static 'assets/css/handoff.css' %}" rel="stylesheet" />
+<link href="{% static 'assets/css/handoff.css' %}?v=5" rel="stylesheet" />
 {% endblock extra_css %}
 
 {% block content %}
@@ -32,6 +32,7 @@
     <a class="ho-chip {% if not filters.state %}on{% endif %}" href="{% url 'sent' %}"><b>{{ stats.total }}</b><span>All sent</span></a>
     <a class="ho-chip {% if filters.state == 'waiting' %}on{% endif %}" href="?state=waiting"><b>{{ stats.waiting }}</b><span>Waiting</span></a>
     <a class="ho-chip {% if filters.state == 'received' %}on{% endif %}" href="?state=received"><b>{{ stats.received }}</b><span>Received</span></a>
+    <a class="ho-chip hot {% if filters.state == 'recall_requests' %}on{% endif %}" href="?state=recall_requests"><b>{{ stats.recall_pending }}</b><span>Recall requests</span></a>
     <a class="ho-chip {% if filters.state == 'recalled' %}on{% endif %}" href="?state=recalled"><b>{{ stats.recalled }}</b><span>Recalled</span></a>
   </div>
 
@@ -55,6 +56,8 @@
         <span class="ho-ref">{{ t.document.reference_no }}</span>
         <div class="ho-badges">
           {% if t.kind == 'return' %}<span class="ho-badge return">Returned</span>{% elif t.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
+          {% if t.is_urgent_deadline %}<span class="ho-badge p-urgent">Urgent</span>{% endif %}
+          {% if t.document.status == 'completed' %}<span class="ho-badge deadline">Completed · {% if t.document.completed_at %}{{ t.document.completed_at|date:"M d, Y g:i A" }} PHT{% else %}time unavailable{% endif %}</span>{% elif t.deadline_label %}<span class="ho-badge deadline">{{ t.document.due_date|date:"M d, Y" }}{% if t.document.due_time %} {{ t.document.due_time|time:"g:i A" }} PHT{% endif %} · {{ t.deadline_label }}</span>{% endif %}
           <span class="ho-st s-{{ t.document.status }}">{{ t.doc_status_label }}</span>
         </div>
       </div>
@@ -66,24 +69,39 @@
         <span>Sent to <b>{{ t.recipient_name }}</b> &middot; {{ t.sent_at|timesince }} ago</span>
       </div>
       {% if t.remark %}<p class="ho-quote">{{ t.remark }}</p>{% endif %}
+      {% if t.document.attachment %}<div class="ho-attachment-row"><a class="ho-attachment" href="{{ t.document.attachment.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i><span>Open attached file</span><i class="fas fa-arrow-up-right-from-square ho-attachment-arrow"></i></a><a class="ho-attachment" href="{{ t.document.attachment.url }}" download="{{ t.document.attachment_name }}"><i class="fas fa-download"></i><span>Download file</span></a></div>{% endif %}
 
       <div>
         {% if t.recalled %}
-          <span class="ho-state recalled"><i class="fas fa-ban me-1"></i>You recalled this file</span>
+          <span class="ho-state recalled"><i class="fas fa-check-circle me-1"></i>Recipient approved your recall</span>
+        {% elif t.recall_pending %}
+          <span class="ho-state waiting"><i class="far fa-clock me-1"></i>Recall request sent · waiting for {{ t.recipient_name }}</span>
+        {% elif t.recall_denied %}
+          <span class="ho-state recalled"><i class="fas fa-times-circle me-1"></i>{{ t.recipient_name }} declined your recall request</span>
         {% elif t.received_at %}
-          <span class="ho-state received"><i class="fas fa-check-double me-1"></i>Received {{ t.received_at|timesince }} ago</span>
+          <span class="ho-state received ho-received-time" title="Received {{ t.received_at|date:'M j, Y g:i A' }}"><i class="fas fa-check-double me-1"></i>Received at {{ t.received_at|date:"g:i A" }} <span class="ho-received-date">&middot; {{ t.received_at|date:"M j, Y" }}</span></span>
         {% else %}
           <span class="ho-state waiting"><i class="far fa-clock me-1"></i>Waiting for {{ t.recipient_name }} to receive it</span>
         {% endif %}
         {% if t.holder_name and not t.recalled %}<div class="ho-meta mt-1"><span><i class="fas fa-user"></i>Now with {{ t.holder_name }}</span></div>{% endif %}
       </div>
 
-      {% if t.can_recall %}
+      {% if t.recalled and t.can_edit_resend %}
       <div class="ho-foot">
-        <span class="text-xs text-secondary">Not received yet</span>
-        <form method="post" action="{% url 'recall_transfer' t.pk %}" onsubmit="return confirm('Recall this file from {{ t.recipient_name|escapejs }}?');">
+        <span class="text-xs text-secondary">The file is back with you.</span>
+        <div class="ho-actions">
+          <a class="ho-icon" href="{% url 'edit_file' t.document.pk %}"><i class="fas fa-edit"></i> Edit file</a>
+          <a class="ho-icon" href="{% url 'sent' %}?state=recalled&amp;send={{ t.document.pk }}"><i class="fas fa-paper-plane"></i> Resend file</a>
+        </div>
+      </div>
+      {% elif t.recalled %}
+      <div class="ho-foot"><span class="text-xs text-secondary">The recall was approved. The file has since been sent on or completed.</span></div>
+      {% elif t.can_recall %}
+      <div class="ho-foot">
+        <span class="text-xs text-secondary">Ask the recipient before taking this file back.</span>
+        <form method="post" action="{% url 'recall_transfer' t.pk %}" onsubmit="return confirm('Ask {{ t.recipient_name|escapejs }} for permission to recall this file?');">
           {% csrf_token %}
-          <button type="submit" class="ho-icon warn"><i class="fas fa-undo"></i> Recall</button>
+          <button type="submit" class="ho-icon warn">{% if t.recall_denied %}<i class="fas fa-redo"></i> Request again{% else %}<i class="fas fa-undo"></i> Request recall{% endif %}</button>
         </form>
       </div>
       {% endif %}

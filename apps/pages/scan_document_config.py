@@ -18,7 +18,7 @@ SECTIONS = [
         "icon": "fa-camera",
         "fields": [
             {"name": "scan_file", "label": "Scan", "type": "file", "required": True, "col": 12,
-             "accept": ".pdf,.png,.jpg,.jpeg,.tif,.tiff", "help": "PDF or image."},
+             "accept": ".pdf,.docx,.png,.jpg,.jpeg,.tif,.tiff", "help": "PDF, Word document (.docx), or image."},
         ],
     },
 ]

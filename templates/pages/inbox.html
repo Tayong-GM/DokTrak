@@ -5,7 +5,7 @@
 
 {% block extra_css %}
 <link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
-<link href="{% static 'assets/css/handoff.css' %}" rel="stylesheet" />
+<link href="{% static 'assets/css/handoff.css' %}?v=5" rel="stylesheet" />
 {% endblock extra_css %}
 
 {% block content %}
@@ -14,7 +14,7 @@
   <div class="dk-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
     <div>
       <h5 class="text-white mb-1">Inbox</h5>
-      <p class="text-white opacity-8 text-sm mb-0">Files other people sent to you to handle.{% if stats.new %} <b>{{ stats.new }} waiting to be received.</b>{% endif %}</p>
+      <p class="text-white opacity-8 text-sm mb-0">Files other people sent to you to handle.{% if stats.new %} <b>{{ stats.new }} waiting to be received.</b>{% endif %}{% if stats.recall_pending %} <b>{{ stats.recall_pending }} recall request{{ stats.recall_pending|pluralize }} awaiting your response.</b>{% endif %}</p>
     </div>
     <a href="{% url 'sent' %}" class="dk-btn dk-btn-ghost dk-btn-sm" style="position:relative;z-index:1;"><i class="fas fa-paper-plane me-1"></i> Files I sent</a>
   </div>
@@ -59,7 +59,8 @@
         <div class="ho-badges">
           {% if f.is_new %}<span class="ho-badge new">New</span>{% endif %}
           {% if f.incoming.kind == 'return' %}<span class="ho-badge return">Returned to you</span>{% elif f.incoming.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
-          <span class="ho-badge p-{{ f.priority }}">{{ f.priority_label }}</span>
+          {% if f.is_urgent_deadline %}<span class="ho-badge p-urgent">Urgent</span>{% endif %}
+          {% if f.status == 'completed' %}<span class="ho-badge deadline">Completed · {% if f.completed_at %}{{ f.completed_at|date:"M d, Y g:i A" }} PHT{% else %}time unavailable{% endif %}</span>{% elif f.deadline_label %}<span class="ho-badge deadline">{{ f.due_date|date:"M d, Y" }}{% if f.due_time %} {{ f.due_time|time:"g:i A" }} PHT{% endif %} · {{ f.deadline_label }}</span>{% endif %}
       {% if f.review_status %}<span class="ho-badge review-{{ f.review_status }}">{{ f.get_review_status_display }}</span>{% endif %}
         </div>
       </div>
@@ -74,15 +75,25 @@
         <span class="ho-avatar">{{ f.sender_initial }}</span>
         <span>From <b>{{ f.sender_name }}</b> &middot; {{ f.incoming.sent_at|timesince }} ago</span>
       </div>
+      {% if f.recall_pending %}
+      <div class="ho-recall-request">
+        <div><strong>{{ f.sender_name }} asked to recall this file.</strong><span>Approve to return it to the sender, or decline to keep it with you.</span></div>
+        <div class="ho-actions">
+          <form method="post" action="{% url 'respond_recall' f.incoming.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="decision" value="approve"><button type="submit" class="dk-btn dk-btn-sm"><i class="fas fa-check me-1"></i> Approve recall</button></form>
+          <form method="post" action="{% url 'respond_recall' f.incoming.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="decision" value="decline"><button type="submit" class="ho-icon warn"><i class="fas fa-times me-1"></i> Decline</button></form>
+        </div>
+      </div>
+      {% endif %}
       {% if f.incoming.remark %}<p class="ho-quote">{{ f.incoming.remark }}</p>{% endif %}
+      {% endif %}
+
+      {% if f.incoming.received_at %}
+      <div><span class="ho-state received ho-received-time" title="Received {{ f.incoming.received_at|date:'M j, Y g:i A' }}"><i class="fas fa-check-double me-1"></i>Received at {{ f.incoming.received_at|date:"g:i A" }} <span class="ho-received-date">&middot; {{ f.incoming.received_at|date:"M j, Y" }}</span></span></div>
       {% endif %}
 
       {% if f.review_status %}<p class="ho-review-info">Updated by <b>{{ f.reviewed_by_name }}</b> · {{ f.reviewed_at|date:"M d, Y g:i A" }}</p>{% endif %}
 
-      <div class="ho-meta">
-        {% if f.due_date %}<span class="{% if f.is_overdue %}late{% endif %}"><i class="far fa-calendar-alt"></i>{% if f.is_overdue %}Overdue &middot; {% else %}Due {% endif %}{{ f.due_date|date:"M d, Y" }}</span>{% endif %}
-        {% if f.attachment %}<span><i class="fas fa-paperclip"></i><a href="{{ f.attachment.url }}" target="_blank" rel="noopener">Attachment</a></span>{% endif %}
-      </div>
+      {% if f.attachment %}<div class="ho-attachment-row"><a class="ho-attachment" href="{{ f.attachment.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i><span>Open attached file</span><i class="fas fa-arrow-up-right-from-square ho-attachment-arrow"></i></a><a class="ho-attachment" href="{{ f.attachment.url }}" download="{{ f.attachment_name }}"><i class="fas fa-download"></i><span>Download file</span></a></div>{% endif %}
 
       <div class="ho-foot">
         {% if f.is_new %}
@@ -106,14 +117,14 @@
             </select>
           </form>
         {% endif %}
-        <div class="ho-actions">
+        {% if not f.recall_pending %}<div class="ho-actions">
           <button type="button" class="ho-icon" data-bs-toggle="modal" data-bs-target="#handoffModal" data-mode="forward"
                   data-action="{% url 'forward_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}"><i class="fas fa-share"></i> Forward</button>
           {% if f.incoming and not f.is_new %}
           <button type="button" class="ho-icon warn" data-bs-toggle="modal" data-bs-target="#handoffModal" data-mode="return"
                   data-action="{% url 'forward_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}" data-to="{{ f.sender_name }}"><i class="fas fa-undo"></i> Return</button>
           {% endif %}
-        </div>
+        </div>{% endif %}
       </div>
     </div>
     {% endfor %}

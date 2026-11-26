@@ -4,7 +4,7 @@
 {% block title %}{{ page.title }}{% endblock title %}
 
 {% block extra_css %}
-<link href="{% static 'assets/css/create_file.css' %}" rel="stylesheet" />
+<link href="{% static 'assets/css/create_file.css' %}?v=6" rel="stylesheet" />
 {% endblock extra_css %}
 
 {% block content %}
@@ -74,6 +74,19 @@
 
 {% block extra_js %}
 <script>
+  // Show the manual due-date input only for the Custom deadline option.
+  var customDueDateWrap = document.querySelector('[data-custom-due-date]');
+  var dueDateInput = customDueDateWrap && customDueDateWrap.querySelector('input[type="date"]');
+  var priorityInputs = document.querySelectorAll('input[name="priority"]');
+  function syncCustomDueDate() {
+    if (!customDueDateWrap || !dueDateInput) return;
+    var isCustom = document.querySelector('input[name="priority"]:checked')?.value === 'custom';
+    customDueDateWrap.classList.toggle('d-none', !isCustom);
+    dueDateInput.required = isCustom;
+  }
+  priorityInputs.forEach(function (input) { input.addEventListener('change', syncCustomDueDate); });
+  syncCustomDueDate();
+
   // Upload zone: show chosen file name + size, drag highlight
   document.querySelectorAll('.dk-drop').forEach(function (drop) {
     var input = drop.querySelector('input[type=file]');
@@ -93,6 +106,10 @@
     drop.closest('form').addEventListener('reset', function () {
       title.textContent = t0; hint.textContent = h0; drop.classList.remove('has-file');
     });
+  });
+
+  document.querySelector('form[enctype="multipart/form-data"]')?.addEventListener('reset', function () {
+    setTimeout(syncCustomDueDate, 0);
   });
 
   // Character counter for textareas with maxlength

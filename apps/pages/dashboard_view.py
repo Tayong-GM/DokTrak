@@ -1,12 +1,13 @@
 from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import render
 from django.utils import timezone
+from django.utils.dateformat import format as date_format
 
 from .document_model import STATUS_CHOICES, Document, Transfer
-from .recent_files_view import _options          # labels come from create_file_config.py
+from .recent_files_view import attach_labels
 
 ATTENTION_LIMIT = 6
 RECENT_LIMIT = 6
@@ -18,6 +19,8 @@ def _due_note(d, today):
     if n < 0:
         return f"Overdue by {-n} day{'s' if n != -1 else ''}", "late"
     if n == 0:
+        if d.due_time and d.due_time < timezone.localtime().time():
+            return f"Overdue since {date_format(d.due_time, 'g:i A')}", "late"
         return "Due today", "soon"
     return f"Due in {n} day{'s' if n != 1 else ''}", "soon"
 
@@ -25,14 +28,15 @@ def _due_note(d, today):
 @login_required
 def dashboard(request):
     today = timezone.localdate()
-    docs = Document.objects.all()
+    docs = Document.objects.filter(is_archived=False)     # active files only
 
     # ---- counts ----
     counts = dict(docs.values_list("status").annotate(n=Count("id")).order_by())
     total = sum(counts.values())
-    overdue = docs.filter(due_date__lt=today).exclude(status="completed").count()
+    overdue_filter = Q(due_date__lt=today) | Q(due_date=today, due_time__lt=timezone.localtime().time())
+    overdue = docs.filter(overdue_filter).exclude(status="completed").count()
     completed = counts.get("completed", 0)
-    returned_to_user = Document.objects.filter(
+    returned_to_user = docs.filter(
         assigned_to=request.user, status="returned",
     ).count()
     stats = {
@@ -46,8 +50,7 @@ def dashboard(request):
         "rate": round(completed * 100 / total) if total else 0,
     }
 
-    labels = {"priority": dict(_options("priority")), "status": dict(STATUS_CHOICES),
-              "type": dict(_options("doc_type"))}
+    
 
     # ---- needs attention: overdue + due within 7 days ----
     attention = list(
@@ -55,26 +58,20 @@ def dashboard(request):
         .filter(due_date__isnull=False, due_date__lte=today + timedelta(days=7))
         .order_by("due_date")[:ATTENTION_LIMIT]
     )
+    attach_labels(attention, status=True, priority=True)
     for d in attention:
         d.due_note, d.due_class = _due_note(d, today)
-        d.status_label = labels["status"].get(d.status, d.status.title())
-        d.priority_label = labels["priority"].get(d.priority, d.priority.title())
 
-    # ---- recent files ----
     recent = list(docs.order_by("-created_at")[:RECENT_LIMIT])
-    for d in recent:
-        d.status_label = labels["status"].get(d.status, d.status.title())
-        d.type_label = labels["type"].get(d.doc_type, d.doc_type.title())
+    attach_labels(recent, status=True, doc_type=True)
 
-    inbox_files, sent_files = [], []
-    if request.user.is_authenticated:
-        inbox_files = list(Document.objects.filter(assigned_to=request.user).order_by("-updated_at")[:5])
-        sent_files = list(Transfer.objects.filter(sender=request.user).select_related(
-            "document", "recipient").order_by("-sent_at")[:5])
-        for f in inbox_files:
-            f.status_label = labels["status"].get(f.status, f.status.title())
-        for transfer in sent_files:
-            transfer.status_label = labels["status"].get(transfer.document.status, transfer.document.status.title())
+    inbox_files = list(docs.filter(assigned_to=request.user).order_by("-updated_at")[:5])
+    sent_files = list(Transfer.objects.filter(sender=request.user).select_related(
+        "document", "recipient").order_by("-sent_at")[:5])
+    attach_labels(inbox_files, status=True)
+    attach_labels([t.document for t in sent_files], status=True)
+    for transfer in sent_files:
+        transfer.status_label = transfer.document.status_label
 
     return render(request, "pages/index.html", {
         "segment": "dashboard",

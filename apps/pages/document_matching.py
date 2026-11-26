@@ -1,13 +1,37 @@
 """Extract text from uploaded documents and find matching saved attachments."""
-from io import BytesIO
+import logging
 import os
 import re
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 from .document_model import Document
 
+logger = logging.getLogger(__name__)
+
 
 class OCRUnavailable(Exception):
+    pass
+
+
+# Errors that mean "this file can't be read", not "there is a bug in our code":
+#   OSError      -> missing/corrupt files, PIL.UnidentifiedImageError, Tesseract not found
+#   ValueError   -> bad image/PDF data
+#   RuntimeError -> PyMuPDF (fitz) FileDataError and pytesseract TesseractError
+#   BadZipFile   -> corrupt .docx
+# Plus python-docx's PackageNotFoundError and Pillow's DecompressionBombError when installed.
+# Anything else (TypeError, KeyError, database errors, ...) is a real bug and should surface.
+UNREADABLE_FILE_ERRORS = (OSError, ValueError, RuntimeError, zipfile.BadZipFile)
+try:
+    from docx.opc.exceptions import PackageNotFoundError
+    UNREADABLE_FILE_ERRORS += (PackageNotFoundError,)
+except ImportError:
+    pass
+try:
+    from PIL import Image as _PILImage
+    UNREADABLE_FILE_ERRORS += (_PILImage.DecompressionBombError,)
+except ImportError:
     pass
 
 
@@ -92,7 +116,9 @@ def find_document_match(scan_text):
                 attachment_text = extract_text(attachment, doc.attachment.name)
         except OCRUnavailable:
             raise
-        except Exception:
+        except UNREADABLE_FILE_ERRORS:
+            # One unreadable attachment shouldn't stop the search: log it and move on.
+            logger.warning("Skipping unreadable attachment of %s", doc.reference_no, exc_info=True)
             continue
         attachment_tokens = _tokens(attachment_text)
         if not attachment_tokens:
