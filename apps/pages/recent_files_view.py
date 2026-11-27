@@ -4,7 +4,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, F, Q
+from django.db.models import Count, Exists, F, OuterRef, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -12,8 +12,8 @@ from django.views.decorators.http import require_POST
 
 
 from .create_file_config import PAGE as CREATE_PAGE, SECTIONS
-from .create_file_view import _clean_file, _clean_value, build_form_fields
-from .document_model import STATUS_CHOICES, Document
+from .create_file_view import _clean_file, _clean_value, build_form_fields, get_destination_choices
+from .document_model import STATUS_CHOICES, Document, Transfer
 
 PAGE_SIZE = 9
 SORTS = {
@@ -66,7 +66,9 @@ def _pager_context(request, paginator, page_obj):
 @login_required
 def recent_files(request):
     today = timezone.localdate()
-    qs = Document.objects.filter(is_archived=False)
+    qs = Document.objects.filter(is_archived=False).annotate(received_flag=Exists(
+        Transfer.objects.filter(document=OuterRef("pk"), recalled=False, received_at__isnull=False)
+    ))
 
     q = request.GET.get("q", "").strip()
     status = request.GET.get("status", "")
@@ -139,8 +141,10 @@ def recent_files(request):
     page_obj = paginator.get_page(request.GET.get("page"))
 
     attach_labels(page_obj, status=True, priority=True, doc_type=True)
-
- 
+    for d in page_obj:
+        d.can_edit = d.edit_error(request.user) is None
+        d.can_delete = d.delete_error(request.user) is None
+        d.can_archive = d.archive_error(request.user) is None
 
     return render(request, "pages/recent_files.html", {
         "segment": "recent_files",
@@ -149,6 +153,7 @@ def recent_files(request):
         "stats": stats,
         "filters": {"q": q, "status": status, "type": dtype, "priority": priority, "sort": sort},
         "has_filters": bool(q or status or dtype or priority),
+        "status_options": STATUS_CHOICES,
         "type_options": _options("doc_type"),
         "priority_options": _options("priority"),
         "sort_options": [(k, v[0]) for k, v in SORTS.items()],
@@ -179,7 +184,8 @@ def archived_files(request):
 # ---------------------------------------------------------------------------
 # EDIT  (re-uses the Create File form + config, pre-filled with the saved values)
 # ---------------------------------------------------------------------------
-LOCKED = {"id", "reference_no", "created_by", "created_at", "updated_at"}
+LOCKED = {"id", "reference_no", "created_by", "created_at", "updated_at",
+          "from_office", "to_office", "final_office"}       # routing can't change after creation
 
 
 @login_required
@@ -187,7 +193,14 @@ def edit_file(request, pk):
     doc = get_object_or_404(Document, pk=pk)
     model_fields = {f.name: f for f in Document._meta.fields}
 
-    # Per-request details live here, not patched onto the field dicts afterwards.
+    destination_options, _ = get_destination_choices()
+
+    def _options_with_current(current_value):
+        opts = list(destination_options)
+        if current_value and current_value not in {v for v, _ in opts}:
+            opts.insert(0, (current_value, current_value))
+        return opts
+
     file_override = {"required": False}
     if doc.attachment:
         file_override["help"] = f"Current file: {doc.attachment_name}. Upload a new one to replace it."
@@ -195,53 +208,10 @@ def edit_file(request, pk):
         f["name"]: file_override
         for s in SECTIONS for f in s["fields"] if f["type"] == "file"
     }
-    sections, fields = build_form_fields(SECTIONS, not_past=False, overrides=overrides)   # old files may already be past due
+    overrides["to_office"] = {"options": _options_with_current(getattr(doc, "to_office", ""))}
+    overrides["final_office"] = {"options": _options_with_current(getattr(doc, "final_office", ""))}
 
-    has_errors = False
-    if request.method == "POST":
-        data, new_files = {}, {}
-        for f in fields:
-            name = f["name"]
-            if f["type"] == "file":
-                value, f["error"] = _clean_file(f, request.FILES.get(name))
-                new_files[name] = value
-            else:
-                raw = request.POST.get(name)
-                value, f["error"] = _clean_value(f, raw)
-                data[name] = value
-                f["value"] = raw or ""
-                f["checked"] = raw in ("on", "true", "1")
-            has_errors = has_errors or bool(f["error"])
-
-        if not has_errors:
-            for name, value in data.items():
-                mf = model_fields.get(name)
-                if mf is None or name in LOCKED:
-                    continue
-                if value == "" and mf.null:
-                    value = None
-                setattr(doc, name, value)
-            for name, upload in new_files.items():
-                if upload and name in model_fields:
-                    getattr(doc, name).delete(save=False)     # remove the old file from storage
-                    setattr(doc, name, upload)
-            doc.save()
-            messages.success(request, f"File {doc.reference_no} was updated.")
-            return redirect("recent_files")
-    else:
-        for f in fields:
-            value = getattr(doc, f["name"], "") if f["type"] != "file" else ""
-            if isinstance(value, date):
-                value = value.isoformat()
-            f["value"] = "" if value is None else value
-            f["checked"] = bool(value)
-
-    page = {**CREATE_PAGE, "title": "Edit File", "subtitle": f"Update the details of {doc.reference_no}.",
-            "submit_label": "Save changes"}
-    return render(request, "pages/create_file.html", {
-        "segment": "recent_files", "page": page, "sections": sections, "has_errors": has_errors,
-    })
-
+    sections, fields = build_form_fields(SECTIONS, not_past=False, overrides=overrides)
 
 # ---------------------------------------------------------------------------
 # ARCHIVE / DELETE  (POST only)
@@ -250,6 +220,10 @@ def edit_file(request, pk):
 @require_POST
 def archive_file(request, pk):
     doc = get_object_or_404(Document, pk=pk, is_archived=False)
+    error = doc.archive_error(request.user)
+    if error:
+        messages.error(request, error)
+        return redirect(_safe_next(request))
     doc.is_archived = True
     doc.archived_at = timezone.now()
     doc.save(update_fields=["is_archived", "archived_at", "updated_at"])
@@ -261,6 +235,10 @@ def archive_file(request, pk):
 @require_POST
 def delete_file(request, pk):
     doc = get_object_or_404(Document, pk=pk)
+    error = doc.delete_error(request.user)
+    if error:
+        messages.error(request, error)
+        return redirect(_safe_next(request))
     ref = doc.reference_no
     if doc.attachment:
         doc.attachment.delete(save=False)                 # don't leave orphan files on disk

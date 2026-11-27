@@ -4,7 +4,11 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-# Workflow statuses shown on the Recent Files page (edit freely; no migration needed).
+# Workflow statuses. The system sets them; nobody picks one by hand:
+#   pending      -> sent / forwarded, waiting for the recipient to receive it
+#   in_progress  -> received, being handled
+#   returned     -> returned to the previous sender (until they receive it)
+#   completed    -> documented by the final recipient (locked)
 STATUS_CHOICES = [
     ("pending", "Pending"),
     ("in_progress", "In progress"),
@@ -16,14 +20,8 @@ REVIEW_STATUS_CHOICES = [
     ("rejected", "Rejected"),
     ("checked", "Checked"),
 ]
-# Manual status changes allowed from each status (via the Inbox status dropdown).
-# "returned" is never a target here: it is only set by the Return action.
-ALLOWED_STATUS_TRANSITIONS = {
-    "pending": {"in_progress", "completed"},
-    "in_progress": {"pending", "completed"},
-    "completed": {"in_progress"},          # reopen; remove this line to make completed final
-    "returned": {"in_progress", "completed"},
-}
+
+_NOT_GIVEN = object()
 
 
 class Document(models.Model):
@@ -38,6 +36,7 @@ class Document(models.Model):
     description = models.TextField(blank=True)
     from_office = models.CharField(max_length=100, blank=True)
     to_office = models.CharField(max_length=100, blank=True)
+    final_office = models.CharField(max_length=100, blank=True)
     priority = models.CharField(max_length=20, default="normal")
     due_date = models.DateField(null=True, blank=True)
     due_time = models.TimeField(null=True, blank=True)
@@ -61,6 +60,16 @@ class Document(models.Model):
     assigned_to = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="assigned_documents",
+    )
+    # The office that ends the route by marking the file as documented.
+    # Empty on files created before this field existed: any holder may document those.
+    final_recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="final_documents",
+    )
+    documented_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="documented_files",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -89,24 +98,46 @@ class Document(models.Model):
     @property
     def attachment_name(self):
         return os.path.basename(self.attachment.name) if self.attachment else ""
-    
-    def can_move_to(self, status):
-        return status == self.status or status in ALLOWED_STATUS_TRANSITIONS.get(self.status, set())
 
-    def status_change_error(self, new_status):
-        """None if the holder may set this status, else a message to show."""
-        if new_status not in dict(STATUS_CHOICES) or new_status == "returned":
-            return "Please choose a valid status. Use Return to send a file back."
-        if not self.can_move_to(new_status):
-            labels = dict(STATUS_CHOICES)
-            return f"A {labels.get(self.status, self.status)} file can't be moved to {labels[new_status]}."
-        return None
+    # ------------------------------------------------------------------
+    # Pipeline rules. Every "may this happen?" check lives here and returns
+    # None when allowed, or the message to show. Views only ask and display.
+    # Flow: send > receive > (decide) > forward / return, ends with "document".
+    # ------------------------------------------------------------------
+    @property
+    def is_locked(self):
+        return self.status == "completed"
+
+    @property
+    def has_been_received(self):
+        """True once any live (not recalled) hand-off of this file has been received."""
+        if hasattr(self, "received_flag"):          # set by a queryset annotation, saves queries
+            return self.received_flag
+        return self.transfers.filter(recalled=False, received_at__isnull=False).exists()
 
     def latest_incoming(self, user):
         """The newest live hand-off of this file to `user`."""
         return self.transfers.filter(recipient=user, recalled=False).select_related("sender").first()
 
+    def _incoming_for(self, user, incoming):
+        return self.latest_incoming(user) if incoming is _NOT_GIVEN else incoming
+
+    @staticmethod
+    def _recall_waiting(incoming):
+        return bool(incoming and incoming.recall_requested_at and incoming.recall_decided_at is None)
+
+    def has_decision_by(self, user, incoming=_NOT_GIVEN):
+        """True if `user` recorded a review decision after receiving this hand-off."""
+        incoming = self._incoming_for(user, incoming)
+        return bool(
+            incoming and incoming.received_at and self.review_status
+            and self.reviewed_by_id == user.pk and self.reviewed_at
+            and self.reviewed_at >= incoming.received_at
+        )
+
     def review_error(self, user, review_status):
+        if self.is_locked:
+            return "Documented files are locked and can't be reviewed."
         incoming = self.latest_incoming(user)
         if not incoming or not incoming.received_at:
             return "Receive the file before reviewing it."
@@ -114,9 +145,64 @@ class Document(models.Model):
             return "Choose Approved, Rejected, or Checked."
         return None
 
-    def send_error(self):
-        if self.status == "completed":
-            return "Completed files can't be sent or forwarded."
+    def send_error(self, user, incoming=_NOT_GIVEN):
+        """May `user` send / forward this file on?"""
+        if self.is_locked:
+            return "Documented files are locked and can't be sent or forwarded."
+        if self.assigned_to_id == user.pk:           # holding it through a hand-off
+            incoming = self._incoming_for(user, incoming)
+            if not incoming or not incoming.received_at:
+                return "Receive the file before sending it on."
+            if self._recall_waiting(incoming):
+                return "Respond to the pending recall request before forwarding this file."
+        return None
+
+    def return_error(self, user, incoming=_NOT_GIVEN):
+        """May `user` return this file to whoever sent it to them?"""
+        if self.is_locked:
+            return "Documented files are locked and can't be returned."
+        incoming = self._incoming_for(user, incoming)
+        if not incoming or not incoming.received_at:
+            return "Receive the file before returning it."
+        if self._recall_waiting(incoming):
+            return "Respond to the pending recall request before returning this file."
+        if self.created_by_id == user.pk:
+            return "You created this file, so send it on instead of returning it."
+        if incoming.sender is None or not incoming.sender.is_active:
+            return "There is nobody to return this file to."
+        if not self.has_decision_by(user, incoming):
+            return "Record a review decision (Approved, Rejected or Checked) before returning this file."
+        return None
+
+    def document_error(self, user, incoming=_NOT_GIVEN):
+        """May `user` mark this file as documented (the last step)?"""
+        if self.is_locked:
+            return "This file is already documented."
+        incoming = self._incoming_for(user, incoming)
+        if not incoming or not incoming.received_at:
+            return "Receive the file before marking it as documented."
+        if self._recall_waiting(incoming):
+            return "Respond to the pending recall request first."
+        if self.final_recipient_id not in (None, user.pk):
+            return f"Only {self.final_office or 'the final recipient'} can mark this file as documented."
+        return None
+
+    def _creator_error(self, user, verb, past):
+        if self.created_by_id != user.pk:
+            return f"Only the person who created this file can {verb} it."
+        if self.has_been_received:
+            return f"This file has already been received, so it can't be {past}."
+        return None
+
+    def edit_error(self, user):
+        return self._creator_error(user, "edit", "edited")
+
+    def delete_error(self, user):
+        return self._creator_error(user, "delete", "deleted")
+
+    def archive_error(self, user):
+        if user.pk not in (self.created_by_id, self.assigned_to_id):
+            return "Only the creator or the current holder can archive this file."
         return None
 
 
@@ -143,6 +229,7 @@ class Transfer(models.Model):
             models.Index(fields=["recipient", "recalled", "received_at"], name="xfer_recipient_idx"),
             models.Index(fields=["sender", "recalled", "received_at"], name="xfer_sender_idx"),
         ]
+
     def __str__(self):
         return f"{self.document.reference_no}: {self.sender} -> {self.recipient}"
 
@@ -152,9 +239,12 @@ class Transfer(models.Model):
         if not self.prev_status and self.document_id:
             self.prev_status = self.document.status
         super().save(*args, **kwargs)
+
     def recall_error(self):
         if self.recalled:
             return "This file was already recalled."
+        if self.document.status == "completed":
+            return "Documented files are locked and can't be recalled."
         if self.recall_requested_at and self.recall_decided_at is None:
             return "A recall request is already waiting for the recipient."
         if self.document.assigned_to_id != self.recipient_id:

@@ -1,0 +1,39 @@
+{% comment %}
+Searchable recipient picker.
+Usage: include 'includes/people_picker.html' with picker_id='forward'
+Needs `people` in the context: a list of (id, label). Submits the chosen id as "recipient".
+{% endcomment %}
+<div class="people-picker" data-people-picker>
+  <input type="text" class="form-control pp-input" list="{{ picker_id }}-list" placeholder="Start typing a name..." autocomplete="off" required>
+  <input type="hidden" name="recipient" class="pp-value">
+  <datalist id="{{ picker_id }}-list">
+    {% for pk, label in people %}<option value="{{ label }}" data-pk="{{ pk }}"></option>{% endfor %}
+  </datalist>
+  <div class="text-xs text-danger mt-1 pp-error" hidden>Pick someone from the suggestions.</div>
+</div>
+<script>
+  (function () {
+    if (window.__peoplePickerReady) return;
+    window.__peoplePickerReady = true;
+    function sync(root) {
+      var input = root.querySelector('.pp-input'), hidden = root.querySelector('.pp-value');
+      var match = Array.prototype.find.call(root.querySelectorAll('datalist option'), function (o) { return o.value === input.value; });
+      hidden.value = match ? match.getAttribute('data-pk') : '';
+      return !!match;
+    }
+    document.addEventListener('input', function (e) {
+      var root = e.target.closest && e.target.closest('[data-people-picker]');
+      if (!root) return;
+      root.querySelector('.pp-error').hidden = true;
+      sync(root);
+    });
+    // Block submit unless the typed text is exactly one of the suggestions.
+    document.addEventListener('submit', function (e) {
+      e.target.querySelectorAll('[data-people-picker]').forEach(function (root) {
+        var input = root.querySelector('.pp-input');
+        if (input.disabled) return;
+        if (!sync(root)) { e.preventDefault(); root.querySelector('.pp-error').hidden = false; input.focus(); }
+      });
+    }, true);
+  })();
+</script>

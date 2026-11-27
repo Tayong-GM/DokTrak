@@ -1,7 +1,10 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
+from .departments import DEPARTMENTS
 from .models import DepartmentProfile
+
+DEPARTMENT_CHOICES = [("", "Select a department")] + [(d, d) for d in DEPARTMENTS]
 
 
 def split_full_name(value):
@@ -46,12 +49,11 @@ class DokTrakRegistrationForm(FullNameDepartmentSaveMixin, UserCreationForm):
             "autocomplete": "email",
         }),
     )
-    department = forms.CharField(
+    department = forms.ChoiceField(
         label="Department",
-        max_length=120,
-        widget=forms.TextInput(attrs={
+        choices=DEPARTMENT_CHOICES,
+        widget=forms.Select(attrs={
             "class": "form-control",
-            "placeholder": "Your department",
             "autocomplete": "organization-title",
         }),
     )
@@ -89,10 +91,10 @@ class UserProfileForm(FullNameDepartmentSaveMixin, forms.ModelForm):
             "autocomplete": "email",
         }),
     )
-    department = forms.CharField(
+    department = forms.ChoiceField(
         label="Department",
-        max_length=120,
-        widget=forms.TextInput(attrs={
+        choices=DEPARTMENT_CHOICES,
+        widget=forms.Select(attrs={
             "class": "form-control dk-profile-input",
             "autocomplete": "organization-title",
         }),

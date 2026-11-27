@@ -29,7 +29,7 @@
     <a class="ho-chip {% if not filters.tab and not filters.status %}on{% endif %}" href="{% url 'inbox' %}"><b>{{ stats.total }}</b><span>Assigned to me</span></a>
     <a class="ho-chip hot {% if filters.tab == 'new' %}on{% endif %}" href="?tab=new"><b>{{ stats.new }}</b><span>New</span></a>
     <a class="ho-chip {% if filters.status == 'in_progress' %}on{% endif %}" href="?status=in_progress"><b>{{ stats.in_progress }}</b><span>In progress</span></a>
-    <a class="ho-chip {% if filters.status == 'completed' %}on{% endif %}" href="?status=completed"><b>{{ stats.completed }}</b><span>Completed</span></a>
+    <a class="ho-chip {% if filters.status == 'completed' %}on{% endif %}" href="?status=completed"><b>{{ stats.completed }}</b><span>Documented</span></a>
     <a class="ho-chip {% if filters.status == 'returned' %}on{% endif %}" href="?status=returned"><b>{{ stats.returned }}</b><span>Returned</span></a>
   </div>
 
@@ -58,10 +58,12 @@
         <span class="ho-ref">{{ f.reference_no }}</span>
         <div class="ho-badges">
           {% if f.is_new %}<span class="ho-badge new">New</span>{% endif %}
-          {% if f.incoming.kind == 'return' %}<span class="ho-badge return">Returned to you</span>{% elif f.incoming.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
+          {% if f.incoming.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
           {% if f.is_urgent_deadline %}<span class="ho-badge p-urgent">Urgent</span>{% endif %}
-          {% if f.status == 'completed' %}<span class="ho-badge deadline">Completed · {% if f.completed_at %}{{ f.completed_at|date:"M d, Y g:i A" }} PHT{% else %}time unavailable{% endif %}</span>{% elif f.deadline_label %}<span class="ho-badge deadline">{{ f.due_date|date:"M d, Y" }}{% if f.due_time %} {{ f.due_time|time:"g:i A" }} PHT{% endif %} · {{ f.deadline_label }}</span>{% endif %}
-      {% if f.review_status %}<span class="ho-badge review-{{ f.review_status }}">{{ f.get_review_status_display }}</span>{% endif %}
+          {% if f.status == 'completed' %}<span class="ho-badge deadline">Documented · {% if f.completed_at %}{{ f.completed_at|date:"M d, Y g:i A" }} PHT{% else %}time unavailable{% endif %}</span>{% elif f.deadline_label %}<span class="ho-badge deadline">{{ f.due_date|date:"M d, Y" }}{% if f.due_time %} {{ f.due_time|time:"g:i A" }} PHT{% endif %} · {{ f.deadline_label }}</span>{% endif %}
+          {% if f.review_status %}<span class="ho-badge review-{{ f.review_status }}">{{ f.get_review_status_display }}</span>{% endif %}
+          {# One status badge, set by the system. A returned file shows "Returned" here only; the "Returned by" wording below is not a second tag. #}
+          <span class="ho-st s-{{ f.status }}">{{ f.status_label }}</span>
         </div>
       </div>
 
@@ -73,7 +75,7 @@
       {% if f.incoming %}
       <div class="ho-person">
         <span class="ho-avatar">{{ f.sender_initial }}</span>
-        <span>From <b>{{ f.sender_name }}</b> &middot; {{ f.incoming.sent_at|timesince }} ago</span>
+        <span>{% if f.incoming.kind == 'return' %}Returned by{% else %}From{% endif %} <b>{{ f.sender_name }}</b> &middot; {{ f.incoming.sent_at|timesince }} ago</span>
       </div>
       {% if f.recall_pending %}
       <div class="ho-recall-request">
@@ -91,7 +93,14 @@
       <div><span class="ho-state received ho-received-time" title="Received {{ f.incoming.received_at|date:'M j, Y g:i A' }}"><i class="fas fa-check-double me-1"></i>Received at {{ f.incoming.received_at|date:"g:i A" }} <span class="ho-received-date">&middot; {{ f.incoming.received_at|date:"M j, Y" }}</span></span></div>
       {% endif %}
 
-      {% if f.review_status %}<p class="ho-review-info">Updated by <b>{{ f.reviewed_by_name }}</b> · {{ f.reviewed_at|date:"M d, Y g:i A" }}</p>{% endif %}
+      {% if f.review_status %}<p class="ho-review-info">Decision by <b>{{ f.reviewed_by_name }}</b> · {{ f.reviewed_at|date:"M d, Y g:i A" }}</p>{% endif %}
+
+      {% if f.final_office or f.is_locked %}
+      <div class="ho-meta">
+        {% if f.final_office %}<span><i class="fas fa-flag-checkered"></i>Final recipient: {{ f.final_office }}</span>{% endif %}
+        {% if f.is_locked and f.documented_by_name %}<span><i class="fas fa-lock"></i>Documented by {{ f.documented_by_name }}</span>{% endif %}
+      </div>
+      {% endif %}
 
       {% if f.attachment %}<div class="ho-attachment-row"><a class="ho-attachment" href="{{ f.attachment.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i><span>Open attached file</span><i class="fas fa-arrow-up-right-from-square ho-attachment-arrow"></i></a><a class="ho-attachment" href="{{ f.attachment.url }}" download="{{ f.attachment_name }}"><i class="fas fa-download"></i><span>Download file</span></a></div>{% endif %}
 
@@ -101,30 +110,40 @@
             {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
             <button type="submit" class="dk-btn dk-btn-sm"><i class="fas fa-check me-1"></i> Mark as received</button>
           </form>
+        {% elif f.is_locked %}
+          <span class="ho-state received"><i class="fas fa-lock me-1"></i>Documented and locked</span>
         {% else %}
-          <form method="post" action="{% url 'inbox_status' f.pk %}">
-            {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <select name="status" class="form-select ho-select" onchange="this.form.submit()" aria-label="Status">
-              {% for value, label in work_statuses %}<option value="{{ value }}" {% if f.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-              {% if f.status == 'returned' %}<option value="returned" selected disabled>Returned</option>{% endif %}
-            </select>
-          </form>
           <form method="post" action="{% url 'review_file' f.pk %}" class="ho-review-form">
             {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <select name="review_status" class="form-select ho-select" aria-label="Review result" onchange="this.form.submit()">
-              <option value="" disabled {% if not f.review_status %}selected{% endif %}>Review result</option>
-              {% for value, label in review_statuses %}<option value="{{ value }}" {% if f.review_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            <select name="review_status" class="form-select ho-select" aria-label="My decision" onchange="this.form.submit()">
+              <option value="" disabled {% if not f.has_decision %}selected{% endif %}>My decision</option>
+              {% for value, label in review_statuses %}<option value="{{ value }}" {% if f.has_decision and f.review_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>
           </form>
         {% endif %}
-        {% if not f.recall_pending %}<div class="ho-actions">
+
+        {% if not f.is_new and not f.is_locked and not f.recall_pending %}
+        <div class="ho-actions">
           <button type="button" class="ho-icon" data-bs-toggle="modal" data-bs-target="#handoffModal" data-mode="forward"
                   data-action="{% url 'forward_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}"><i class="fas fa-share"></i> Forward</button>
-          {% if f.incoming and not f.is_new %}
-          <button type="button" class="ho-icon warn" data-bs-toggle="modal" data-bs-target="#handoffModal" data-mode="return"
-                  data-action="{% url 'forward_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}" data-to="{{ f.sender_name }}"><i class="fas fa-undo"></i> Return</button>
+          {% if f.show_return %}
+            {% if f.return_blocked %}
+            <button type="button" class="ho-icon warn" disabled style="opacity:.55;cursor:not-allowed;" title="{{ f.return_blocked }}"><i class="fas fa-undo"></i> Return</button>
+            {% else %}
+            <button type="button" class="ho-icon warn" data-bs-toggle="modal" data-bs-target="#handoffModal" data-mode="return"
+                    data-action="{% url 'forward_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}" data-to="{{ f.sender_name }}"><i class="fas fa-undo"></i> Return</button>
+            {% endif %}
           {% endif %}
-        </div>{% endif %}
+          {% if f.show_document %}
+            {% if f.document_blocked %}
+            <button type="button" class="ho-icon" disabled style="opacity:.55;cursor:not-allowed;" title="{{ f.document_blocked }}"><i class="fas fa-flag-checkered"></i> Mark as documented</button>
+            {% else %}
+            <button type="button" class="ho-icon" data-bs-toggle="modal" data-bs-target="#documentModal"
+                    data-action="{% url 'document_file' f.pk %}" data-name="{{ f.reference_no }} - {{ f.title }}"><i class="fas fa-flag-checkered"></i> Mark as documented</button>
+            {% endif %}
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
     </div>
     {% endfor %}
@@ -168,16 +187,13 @@
           <div><h6 class="mb-0" id="handoffTitle">Forward file</h6><p class="text-xs text-secondary mb-0" id="handoffName"></p></div>
         </div>
         <div class="mb-3" id="recipientWrap">
-          <label class="dk-label" for="recipientSelect">Send to</label>
+          <label class="dk-label">Send to</label>
           {% if people %}
-          <select class="form-select" name="recipient" id="recipientSelect" required>
-            <option value="">Choose a person...</option>
-            {% for pk, label in people %}<option value="{{ pk }}">{{ label }}</option>{% endfor %}
-          </select>
+            {% include 'includes/people_picker.html' with picker_id='forward' %}
           {% else %}<p class="text-sm text-secondary mb-0">There are no other users yet.</p>{% endif %}
         </div>
         <div>
-          <label class="dk-label" for="handoffRemark">Remark <span class="text-secondary fw-normal">(optional)</span></label>
+          <label class="dk-label" for="handoffRemark">Remark <span class="text-secondary fw-normal" id="remarkHint">(optional)</span></label>
           <textarea class="form-control" name="remark" id="handoffRemark" rows="3" maxlength="300" placeholder="What should they do with it?"></textarea>
         </div>
       </div>
@@ -188,13 +204,34 @@
     </form>
   </div>
 </div>
+
+<!-- ===== Mark as documented modal ===== -->
+<div class="modal fade dk" id="documentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" class="modal-content" id="documentForm" style="border-radius:1rem;">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div class="modal-body text-center p-4">
+        <div class="dk-icon mx-auto mb-3" style="width:3.2rem;height:3.2rem;"><i class="fas fa-flag-checkered"></i></div>
+        <h6 class="mb-1">Mark this file as documented?</h6>
+        <p class="text-sm text-secondary mb-0" id="documentName"></p>
+        <p class="text-xs text-secondary mt-2 mb-0">This ends the route. The file is locked and can't be forwarded, returned or recalled.</p>
+      </div>
+      <div class="d-flex justify-content-center gap-2 pb-4">
+        <button type="button" class="dk-btn dk-btn-ghost dk-btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="dk-btn dk-btn-sm">Mark as documented</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock content %}
 
 {% block extra_js %}
 <script>
   document.getElementById('handoffModal').addEventListener('show.bs.modal', function (e) {
     var b = e.relatedTarget, isReturn = b.getAttribute('data-mode') === 'return';
-    var select = document.getElementById('recipientSelect');
+    var picker = document.querySelector('#handoffModal [data-people-picker]');
+    var remark = document.getElementById('handoffRemark');
     document.getElementById('handoffForm').action = b.getAttribute('data-action');
     document.getElementById('handoffName').textContent = b.getAttribute('data-name');
     document.getElementById('handoffTitle').textContent = isReturn ? 'Return to ' + b.getAttribute('data-to') : 'Forward file';
@@ -202,8 +239,21 @@
     document.getElementById('handoffIcon').className = 'fas ' + (isReturn ? 'fa-undo' : 'fa-share');
     document.getElementById('returnFlag').disabled = !isReturn;
     document.getElementById('recipientWrap').hidden = isReturn;
-    if (select) { select.disabled = isReturn; select.required = !isReturn; select.value = ''; }
-    document.getElementById('handoffRemark').value = '';
+    if (picker) {
+      var input = picker.querySelector('.pp-input'), hidden = picker.querySelector('.pp-value');
+      input.value = ''; hidden.value = '';
+      input.disabled = isReturn; hidden.disabled = isReturn; input.required = !isReturn;
+      picker.querySelector('.pp-error').hidden = true;
+    }
+    remark.required = isReturn;
+    document.getElementById('remarkHint').textContent = isReturn ? '(required)' : '(optional)';
+    remark.value = '';
+  });
+
+  document.getElementById('documentModal').addEventListener('show.bs.modal', function (e) {
+    var b = e.relatedTarget;
+    document.getElementById('documentForm').action = b.getAttribute('data-action');
+    document.getElementById('documentName').textContent = b.getAttribute('data-name');
   });
 </script>
 {% endblock extra_js %}

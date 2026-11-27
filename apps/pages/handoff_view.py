@@ -1,9 +1,9 @@
 """Inbox (files sent to you) and Sent (files you sent to others) + the actions between them.
 
-All rules about which status / review / send / recall moves are allowed live on the
-models (Document.status_change_error, review_error, send_error and
-Transfer.recall_error in document_model.py). The views only look the objects up,
-ask the model, and show its message.
+The pipeline is: send > receive > (decide) > forward / return, ending with "document".
+Every rule about what may happen lives on the models (Document.send_error, return_error,
+document_error, review_error and Transfer.recall_error in document_model.py). The views
+only look the objects up, ask the model, and show its message.
 """
 from datetime import datetime, time
 
@@ -142,7 +142,7 @@ def inbox(request):
         "returned": counts.get("returned", 0),
     }
 
-    qs = mine.select_related("reviewed_by").annotate(
+    qs = mine.select_related("reviewed_by", "documented_by").annotate(
         latest_sent=Max("transfers__sent_at", filter=Q(transfers__recipient=me, transfers__recalled=False))
     )
     if tab == "new":
@@ -172,6 +172,14 @@ def inbox(request):
         d.is_urgent_deadline = _is_urgent_deadline(d)
         d.recall_pending = bool(t and t.recall_requested_at and t.recall_decided_at is None)
         d.reviewed_by_name = display_name(d.reviewed_by)
+        d.documented_by_name = display_name(d.documented_by) if d.documented_by_id else ""
+        # What this holder may do next. *_blocked is None when allowed, else the reason to show.
+        d.has_decision = d.has_decision_by(me, t)
+        d.forward_blocked = d.send_error(me, t)
+        d.return_blocked = d.return_error(me, t)
+        d.document_blocked = d.document_error(me, t)
+        d.show_return = bool(t and d.created_by_id != me.pk and not d.is_locked)
+        d.show_document = bool(d.final_recipient_id in (None, me.pk) and not d.is_locked)
 
     return render(request, "pages/inbox.html", {
         "segment": "inbox",
@@ -190,44 +198,28 @@ def inbox(request):
 @login_required
 @require_POST
 def receive_file(request, pk):
+    """Receiving is what starts the work: the system moves the file to In progress."""
     doc = get_object_or_404(Document, pk=pk, assigned_to=request.user, is_archived=False)
     if _mark_received(doc, request.user):
-        if doc.status == "pending" and doc.status_change_error("in_progress") is None:
+        if doc.status in ("pending", "returned"):
             doc.status = "in_progress"
             doc.save(update_fields=["status", "updated_at"])
-        if doc.status == "in_progress":
-            messages.success(request, f"{doc.reference_no} received and moved to In progress.")
-        else:
-            messages.success(request, f"{doc.reference_no} marked as received.")
+        messages.success(request, f"{doc.reference_no} received and moved to In progress.")
     return _back(request)
 
 
 @login_required
 @require_POST
 def inbox_status(request, pk):
-    doc = get_object_or_404(Document, pk=pk, assigned_to=request.user, is_archived=False)
-    status = request.POST.get("status", "")
-    error = doc.status_change_error(status)
-    if error:
-        messages.error(request, error)
-        return _back(request)
-    _mark_received(doc, request.user)                # working on it counts as receiving it
-    update_fields = ["status", "updated_at"]
-    if status == "completed" and doc.status != "completed":
-        doc.completed_at = timezone.now()
-        update_fields.append("completed_at")
-    elif status != "completed" and doc.status == "completed":
-        doc.completed_at = None
-        update_fields.append("completed_at")
-    doc.status = status
-    doc.save(update_fields=update_fields)
-    messages.success(request, f"{doc.reference_no} is now {dict(STATUS_CHOICES)[status]}.")
+    """Retired: the status is set by the system. Kept only so old pages that still post here don't crash."""
+    messages.error(request, "The status is set automatically as the file moves along its route.")
     return _back(request)
 
 
 @login_required
 @require_POST
 def review_file(request, pk):
+    """Record a decision (Approved / Rejected / Checked). Needed before the file can be returned."""
     doc = get_object_or_404(Document, pk=pk, assigned_to=request.user, is_archived=False)
     review_status = request.POST.get("review_status", "")
     error = doc.review_error(request.user, review_status)
@@ -249,33 +241,49 @@ def forward_file(request, pk):
     me = request.user
     doc = get_object_or_404(Document, pk=pk, assigned_to=me, is_archived=False)
     incoming = doc.latest_incoming(me)
-    if incoming and incoming.recall_requested_at and incoming.recall_decided_at is None:
-        messages.error(request, "Respond to the pending recall request before forwarding or returning this file.")
-        return _back(request)
     remark = _remark(request)
 
     if request.POST.get("return"):
-        last = doc.latest_incoming(me)
-        target = last.sender if last and last.sender and last.sender.is_active else None
-        kind, status = "return", "returned"
-        if target is None:
-            messages.error(request, "There is nobody to return this file to.")
-            return _back(request)
-    else:
-        target = _recipient(request)
-        kind, status = "forward", "pending"
-        if target is None:
-            messages.error(request, "Please choose who to send this file to.")
-            return _back(request)
-        error = doc.send_error()
+        error = doc.return_error(me, incoming)
+        if not error and not remark:
+            error = "Add a remark explaining why you are returning this file."
         if error:
             messages.error(request, error)
             return _back(request)
+        target = incoming.sender
+        kind, status = "return", "returned"
+    else:
+        target = _recipient(request)
+        if target is None:
+            messages.error(request, "Please choose who to send this file to.")
+            return _back(request)
+        error = doc.send_error(me, incoming)
+        if error:
+            messages.error(request, error)
+            return _back(request)
+        kind, status = "forward", "pending"
 
-    _mark_received(doc, me)
     _hand_off(doc, me, target, remark, kind, status)
     verb = "returned to" if kind == "return" else "forwarded to"
     messages.success(request, f"{doc.reference_no} was {verb} {display_name(target)}.")
+    return _back(request)
+
+
+@login_required
+@require_POST
+def document_file(request, pk):
+    """Last step of the route: the final recipient marks the file as documented. It is then locked."""
+    me = request.user
+    doc = get_object_or_404(Document, pk=pk, assigned_to=me, is_archived=False)
+    error = doc.document_error(me)
+    if error:
+        messages.error(request, error)
+        return _back(request)
+    doc.status = "completed"
+    doc.completed_at = timezone.now()
+    doc.documented_by = me
+    doc.save(update_fields=["status", "completed_at", "documented_by", "updated_at"])
+    messages.success(request, f"{doc.reference_no} was documented and is now locked.")
     return _back(request)
 
 
@@ -335,6 +343,17 @@ def sent(request):
         )
         t.holder_name = display_name(d.assigned_to) if d.assigned_to_id and d.assigned_to_id != t.recipient_id else ""
 
+    # Files you may send: your own unsent ones, or files you hold AND have already received.
+    received_by_me = Exists(Transfer.objects.filter(
+        document=OuterRef("pk"), recipient=me, recalled=False, received_at__isnull=False,
+    ))
+    sendable = (
+        _holdable(me).exclude(status="completed")
+        .annotate(received_by_me=received_by_me)
+        .filter(Q(assigned_to__isnull=True) | Q(received_by_me=True))
+        .order_by("-created_at")[:300]
+    )
+
     return render(request, "pages/sent.html", {
         "segment": "sent",
         "page_obj": page_obj,
@@ -343,7 +362,7 @@ def sent(request):
         "filters": {"q": q, "state": state},
         "has_filters": bool(q or state),
         "people": _people(me),
-        "sendable": _holdable(me).exclude(status="completed").order_by("-created_at")[:300],
+        "sendable": sendable,
         "preselect": request.GET.get("send", ""),
         **_pager_context(request, paginator, page_obj),
     })
@@ -358,16 +377,16 @@ def send_file(request):
     except ValueError:
         doc = None
     target = _recipient(request)
+    error = doc.send_error(me) if doc else None
 
     if doc is None:
         messages.error(request, "Choose one of your own files to send.")
-    elif doc.send_error():
-        messages.error(request, doc.send_error())
+    elif error:
+        messages.error(request, error)
     elif target is None:
         messages.error(request, "Please choose who to send the file to.")
     else:
         kind = "forward" if doc.assigned_to_id == me.pk else "send"
-        _mark_received(doc, me)
         _hand_off(doc, me, target, _remark(request), kind, "pending")
         messages.success(request, f"{doc.reference_no} was sent to {display_name(target)}.")
     return redirect("sent")

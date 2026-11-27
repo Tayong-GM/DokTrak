@@ -55,7 +55,7 @@
       <div class="ho-top">
         <span class="ho-ref">{{ t.document.reference_no }}</span>
         <div class="ho-badges">
-          {% if t.kind == 'return' %}<span class="ho-badge return">Returned</span>{% elif t.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
+          {% if t.kind == 'forward' %}<span class="ho-badge forward">Forwarded</span>{% endif %}
           {% if t.is_urgent_deadline %}<span class="ho-badge p-urgent">Urgent</span>{% endif %}
           {% if t.document.status == 'completed' %}<span class="ho-badge deadline">Completed · {% if t.document.completed_at %}{{ t.document.completed_at|date:"M d, Y g:i A" }} PHT{% else %}time unavailable{% endif %}</span>{% elif t.deadline_label %}<span class="ho-badge deadline">{{ t.document.due_date|date:"M d, Y" }}{% if t.document.due_time %} {{ t.document.due_time|time:"g:i A" }} PHT{% endif %} · {{ t.deadline_label }}</span>{% endif %}
           <span class="ho-st s-{{ t.document.status }}">{{ t.doc_status_label }}</span>
@@ -66,7 +66,7 @@
 
       <div class="ho-person">
         <span class="ho-avatar">{{ t.recipient_initial }}</span>
-        <span>Sent to <b>{{ t.recipient_name }}</b> &middot; {{ t.sent_at|timesince }} ago</span>
+        <span>{% if t.kind == 'return' %}Returned to{% else %}Sent to{% endif %} <b>{{ t.recipient_name }}</b> &middot; {{ t.sent_at|timesince }} ago</span>
       </div>
       {% if t.remark %}<p class="ho-quote">{{ t.remark }}</p>{% endif %}
       {% if t.document.attachment %}<div class="ho-attachment-row"><a class="ho-attachment" href="{{ t.document.attachment.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i><span>Open attached file</span><i class="fas fa-arrow-up-right-from-square ho-attachment-arrow"></i></a><a class="ho-attachment" href="{{ t.document.attachment.url }}" download="{{ t.document.attachment_name }}"><i class="fas fa-download"></i><span>Download file</span></a></div>{% endif %}
@@ -99,10 +99,8 @@
       {% elif t.can_recall %}
       <div class="ho-foot">
         <span class="text-xs text-secondary">Ask the recipient before taking this file back.</span>
-        <form method="post" action="{% url 'recall_transfer' t.pk %}" onsubmit="return confirm('Ask {{ t.recipient_name|escapejs }} for permission to recall this file?');">
-          {% csrf_token %}
-          <button type="submit" class="ho-icon warn">{% if t.recall_denied %}<i class="fas fa-redo"></i> Request again{% else %}<i class="fas fa-undo"></i> Request recall{% endif %}</button>
-        </form>
+        <button type="button" class="ho-icon warn" data-bs-toggle="modal" data-bs-target="#recallModal"
+                data-action="{% url 'recall_transfer' t.pk %}" data-name="{{ t.document.reference_no }} - {{ t.document.title }}" data-to="{{ t.recipient_name }}">{% if t.recall_denied %}<i class="fas fa-redo"></i> Request again{% else %}<i class="fas fa-undo"></i> Request recall{% endif %}</button>
       </div>
       {% endif %}
     </div>
@@ -154,11 +152,8 @@
           </select>
         </div>
         <div class="mb-3">
-          <label class="dk-label" for="sendTo">Send to</label>
-          <select class="form-select" name="recipient" id="sendTo" required>
-            <option value="">Choose a person...</option>
-            {% for pk, label in people %}<option value="{{ pk }}">{{ label }}</option>{% endfor %}
-          </select>
+          <label class="dk-label">Send to</label>
+          {% include 'includes/people_picker.html' with picker_id='send' %}
         </div>
         <div>
           <label class="dk-label" for="sendRemark">Remark <span class="text-secondary fw-normal">(optional)</span></label>
@@ -177,9 +172,37 @@
     </form>
   </div>
 </div>
+
+<!-- ===== Request recall modal ===== -->
+<div class="modal fade dk" id="recallModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" class="modal-content" id="recallForm" style="border-radius:1rem;">
+      {% csrf_token %}
+      <div class="modal-body text-center p-4">
+        <div class="dk-icon mx-auto mb-3" style="width:3.2rem;height:3.2rem;"><i class="fas fa-undo"></i></div>
+        <h6 class="mb-1">Ask <span id="recallTo">the recipient</span> to give this file back?</h6>
+        <p class="text-sm text-secondary mb-0" id="recallName"></p>
+        <p class="text-xs text-secondary mt-2 mb-0">The file only comes back if they approve. Until they answer, it stays with them.</p>
+      </div>
+      <div class="d-flex justify-content-center gap-2 pb-4">
+        <button type="button" class="dk-btn dk-btn-ghost dk-btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="dk-btn dk-btn-sm">Request recall</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock content %}
 
 {% block extra_js %}
+<script>
+  var recallModal = document.getElementById('recallModal');
+  if (recallModal) recallModal.addEventListener('show.bs.modal', function (e) {
+    var b = e.relatedTarget;
+    document.getElementById('recallForm').action = b.getAttribute('data-action');
+    document.getElementById('recallName').textContent = b.getAttribute('data-name');
+    document.getElementById('recallTo').textContent = b.getAttribute('data-to');
+  });
+</script>
 {% if preselect %}
 <script>
   // opened from a "Send" link with ?send=<file id>

@@ -22,7 +22,7 @@ from .models import DepartmentProfile
 # `files` -> uploaded files keyed by field name   (files["attachment"])
 # Return the reference number to show in the success message.
 # ---------------------------------------------------------------------------
-def save_document(data, files, request, recipient):
+def save_document(data, files, request, recipient, final_recipient):
     ref = f"{PAGE['reference_prefix']}-{timezone.localdate():%Y}-{uuid.uuid4().hex[:6].upper()}"
     model_fields = {f.name for f in Document._meta.fields}
     values = {k: v for k, v in data.items() if k in model_fields}
@@ -35,6 +35,7 @@ def save_document(data, files, request, recipient):
             reference_no=ref,
             created_by=request.user,
             assigned_to=recipient,
+            final_recipient=final_recipient,
             **values,
         )
         Transfer.objects.create(
@@ -42,6 +43,49 @@ def save_document(data, files, request, recipient):
             kind="send", prev_status=document.status,
         )
     return ref
+
+
+def get_destination_choices(exclude_user=None):
+    """Return (options, users_map) for routing dropdowns."""
+    destination_options = []
+    destination_users = {}
+
+    User = get_user_model()
+    user_qs = User.objects.filter(is_active=True)
+    if exclude_user is not None:
+        user_qs = user_qs.exclude(pk=exclude_user.pk)
+    users = list(user_qs.only("username", "first_name", "last_name").order_by(
+        "first_name", "last_name", "username"
+    ))
+
+    name_counts = {}
+    for user in users:
+        display = user.get_full_name().strip() or user.get_username()
+        name_counts[display] = name_counts.get(display, 0) + 1
+
+    for user in users:
+        display = user.get_full_name().strip() or user.get_username()
+        value = f"{display} (@{user.get_username()})" if name_counts[display] > 1 else display
+        if len(value) > 100:
+            value = user.get_username()[:100]
+        label = f"{display} (@{user.get_username()})" if display != user.get_username() else f"@{user.get_username()}"
+        destination_options.append((value, label))
+        destination_users[value] = user
+
+    dept_qs = DepartmentProfile.objects.filter(user__is_active=True).exclude(department="")
+    if exclude_user is not None:
+        dept_qs = dept_qs.exclude(user=exclude_user)
+    departments = dept_qs.select_related("user").order_by("department", "user_id")
+
+    department_members = {}
+    for profile in departments:
+        department_members.setdefault(profile.department[:100], []).append(profile.user)
+    for department, members in department_members.items():
+        if len(members) == 1 and department not in destination_users:
+            destination_options.append((department, f"{department} (Office)"))
+            destination_users[department] = members[0]
+
+    return destination_options, destination_users
 
 
 # ---------------------------------------------------------------------------
@@ -146,37 +190,9 @@ def build_form_fields(sections, *, not_past=None, overrides=None):
 
 @login_required
 def create_file(request):
-    destination_suggestions = []
-    destination_users = {}
-
     sender_name = request.user.get_full_name().strip() or request.user.get_username()
-    User = get_user_model()
-    users = list(User.objects.filter(is_active=True).exclude(pk=request.user.pk).only(
-        "username", "first_name", "last_name"
-    ).order_by("first_name", "last_name", "username"))
-    name_counts = {}
-    for user in users:
-        display = user.get_full_name().strip() or user.get_username()
-        name_counts[display] = name_counts.get(display, 0) + 1
-    for user in users:
-        display = user.get_full_name().strip() or user.get_username()
-        value = f"{display} (@{user.get_username()})" if name_counts[display] > 1 else display
-        if len(value) > 100:
-            value = user.get_username()[:100]
-        destination_suggestions.append({"value": value, "label": f"User · @{user.get_username()}"})
-        destination_users[value] = user
-    departments = DepartmentProfile.objects.filter(user__is_active=True).exclude(
-        department="",
-    ).exclude(user=request.user).select_related("user").order_by("department", "user_id")
-    department_members = {}
-    for profile in departments:
-        department_members.setdefault(profile.department[:100], []).append(profile.user)
-    for department, members in department_members.items():
-        if len(members) == 1 and department not in destination_users:
-            destination_suggestions.append({"value": department, "label": "Office"})
-            destination_users[department] = members[0]
+    destination_options, destination_users = get_destination_choices(exclude_user=request.user)
 
-    # Built after the sender and destinations exist, so their details are declared up front.
     sections, fields = build_form_fields(SECTIONS, not_past=True, overrides={
         "from_office": {
             "value": sender_name[:100],
@@ -184,8 +200,12 @@ def create_file(request):
             "help": "Filled automatically with the signed-in sender.",
         },
         "to_office": {
-            "suggestions": destination_suggestions,
+            "options": destination_options,
             "help": "Choose a registered person or office. The file will be delivered to their inbox as soon as it is created.",
+        },
+        "final_office": {
+            "options": destination_options,
+            "help": "The office that ends the route by marking the file as documented.",
         },
     })
 
@@ -222,18 +242,22 @@ def create_file(request):
                 data["due_date"] = timezone.localdate() + timedelta(days=deadline_days[data["priority"]])
 
         if not has_errors:
-            destination = data.get("to_office", "").strip()
-            recipient = destination_users.get(destination)
+            recipient = destination_users.get(data.get("to_office", "").strip())
+            final_recipient = destination_users.get(data.get("final_office", "").strip())
             if recipient is None:
                 to_field = next(f for f in fields if f["name"] == "to_office")
                 to_field["error"] = "Choose a person, or an office with exactly one active registered member, so the file can be delivered."
+                has_errors = True
+            if final_recipient is None:
+                final_field = next(f for f in fields if f["name"] == "final_office")
+                final_field["error"] = "Choose a person, or an office with exactly one active registered member, as the final recipient."
                 has_errors = True
 
         if not has_errors:
             duplicate_warning = Document.objects.filter(title__iexact=data.get("title", "")).exists()
             confirmed_duplicate = request.POST.get("confirm_duplicate") == "1"
             if not (duplicate_warning and not confirmed_duplicate):
-                ref = save_document(data, files, request, recipient)
+                ref = save_document(data, files, request, recipient, final_recipient)
                 messages.success(request, f"File {ref} was created and sent to {recipient.get_full_name().strip() or recipient.get_username()}.")
                 return redirect("create_file")
     else:
